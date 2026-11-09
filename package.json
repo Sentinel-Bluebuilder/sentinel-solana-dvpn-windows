@@ -1,6 +1,6 @@
 {
   "name": "devnet-dvpn",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Devnet dVPN — pure peer-to-peer dVPN desktop app on the Sentinel Solana devnet protocol",
   "main": "out/main/index.cjs",

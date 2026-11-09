@@ -58,6 +58,20 @@ describe('PowerShell scripts', () => {
     expect(s.indexOf("lock-daemon-home.ps1') -DaemonHome $DaemonHome")).toBeGreaterThan(s.indexOf('service install --instance'));
   });
 
+  // QA 11-09: PowerShell 5.1 under EAP Stop throws on net.exe's stderr, so a second daemon install for a user
+  // already in the group failed with "System error 1378" before the 1378 check. The native call runs under Continue.
+  it('setup-daemon adds the user to the group with EAP Continue, so "already a member" (1378) is not fatal', () => {
+    const s = readFileSync('resources/scripts/setup-daemon.ps1', 'latin1');
+    const call = s.indexOf('& net.exe localgroup $group $User /add 2>&1');
+    expect(call).toBeGreaterThan(0);
+    const before = s.slice(0, call);
+    expect(before.lastIndexOf("$ErrorActionPreference = 'Continue'")).toBeGreaterThan(before.lastIndexOf("$ErrorActionPreference = 'Stop'"));
+    const after = s.slice(call);
+    expect(after.indexOf('$addCode = $LASTEXITCODE')).toBeLessThan(after.indexOf("$ErrorActionPreference = 'Stop'"));
+    expect(after).toMatch(/if \(\$addCode -eq 0\) \{ \$relogin = \$true \}/);
+    expect(after).toMatch(/-notmatch '1378'/);
+  });
+
   it.runIf(process.platform === 'win32')('parse with no errors', () => {
     const list = files.map((f) => `'${f.replace(/'/g, "''")}'`).join(',');
     const cmd = `foreach ($f in @(${list})) { $e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$e); foreach ($x in $e) { "$f line $($x.Extent.StartLineNumber): $($x.Message)" } }`;

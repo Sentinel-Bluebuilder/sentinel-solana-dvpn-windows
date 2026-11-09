@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 - patch release (2026-11-09)
+
+- Running `daemon install --yes` again (reinstall or repair) no longer fails with "System error 1378" when your user is already in the `sentinel-dvpn` group: Windows PowerShell 5.1 turned `net.exe`'s "already a member" line into a fatal error before the script could check for it.
+- A node that accepts the session but passes no traffic is now described in plain words everywhere in the app, including the session list ("Connected to the server, but no traffic gets through it. Try another server or protocol."). The raw connection details stay in the app log only (Q0369).
+- App-only patch: the Sentinel daemon and CLI are unchanged (fork cut `final6.5`, `90014b2`). Windows x64 and ARM64 installers.
+
 ## 0.2.0 - final release (2026-11-09)
 
 - Built on the Sentinel Solana fork cut `final6.5` (`90014b2`): status fails fast (2 s) while the service restarts or stops (Q0469); a tunnel that receives nothing is reported within 2 s and long soaks show no false "Reconnecting" (Q0445, Q0480).

@@ -150,8 +150,13 @@ try {
   if (-not $User) { $User = (Get-CimInstance Win32_ComputerSystem).UserName }
   $relogin = $false
   if ($User) {
+    # PowerShell 5.1 with EAP Stop turns net.exe's stderr line into a terminating error, so "already a member"
+    # (1378: a second daemon install, reinstall or repair) threw before the 1378 check below (QA 11-09).
+    $ErrorActionPreference = 'Continue'
     $add = (& net.exe localgroup $group $User /add 2>&1 | Out-String)
-    if ($LASTEXITCODE -eq 0) { $relogin = $true }
+    $addCode = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($addCode -eq 0) { $relogin = $true }
     elseif ($add -notmatch '1378') { throw "could not add $User to the $group group: $($add.Trim())" }
   } else {
     Write-Warning "no signed-in user found; add one with: net localgroup $group <user> /add"

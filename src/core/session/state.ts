@@ -85,6 +85,10 @@ const CLOSE_REASONS: Array<[RegExp, Copy]> = [
   [/credit exhausted|escrow exhausted/i, { message: 'Your deposit ran out.', action: 'Add funds and reconnect' }],
   // Q0366: nothing passed through the tunnel and one redial failed.
   [/server stopped working/i, { message: 'The connection to this server stopped working.', action: 'Pick another server' }],
+  // Q0369 (0.2.1): dvpnd's post-connect check ended a session that carried nothing. Its reason holds one raw
+  // "dial tcp ... connectex ..." line per probe target; the user sees plain words, the raw text stays in the logs.
+  [/no traffic passes through the tunnel/i, { message: 'Connected to the server, but no traffic gets through it. Try another server or protocol.', action: 'Pick another server' }],
+  [/this network drops large packets/i, { message: "This network drops large packets, so this server's tunnel can't carry traffic. A server with V2Ray or Xray usually works.", action: 'Try another protocol' }],
   [/\bidle\b|connection lost/i, { message: 'Connection to the server was lost.', action: 'Reconnect' }],
   [/closed by operator/i, { message: 'The server ended the session.', action: 'Pick another server' }],
   [/position closed on chain/i, { message: 'The payment channel was closed.', action: 'Reconnect with a new deposit' }],
