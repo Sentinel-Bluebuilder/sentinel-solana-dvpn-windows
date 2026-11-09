@@ -1,0 +1,219 @@
+{
+  "_comment": "Every third-party program the Windows installer ships. Pinned by version + SHA-256; scripts/fetch-deps.mjs refuses any mismatch. Top-level fields = x64; an \"arm64\" block overrides them for the ARM64 installer (fetch-deps --arch arm64). Bump = new url + sha256 for EVERY arch + a live test (docs/INSTALLER.md).",
+  "deps": [
+    {
+      "name": "wireguard",
+      "title": "WireGuard for Windows",
+      "version": "1.1.1",
+      "url": "https://download.wireguard.com/windows-client/wireguard-amd64-1.1.1.msi",
+      "sha256": "7bfed60ad61b785c914b38b61555a975488e1d3ec472dbfb2fcdf498fca75242",
+      "kind": "msi",
+      "signer": "WireGuard LLC",
+      "license": "MIT",
+      "licenseUrl": "https://git.zx2c4.com/wireguard-windows/tree/COPYING",
+      "sourceUrl": "https://git.zx2c4.com/wireguard-windows/",
+      "arm64": {
+        "url": "https://download.wireguard.com/windows-client/wireguard-arm64-1.1.1.msi",
+        "sha256": "8336335c738d4aff040fa9d11b752da65a80b6f41d3262d6ba5e82f97ebd1bd4"
+      }
+    },
+    {
+      "name": "amneziawg",
+      "title": "AmneziaWG for Windows",
+      "version": "3.1.0",
+      "url": "https://github.com/amnezia-vpn/amneziawg-windows-client/releases/download/3.1.0/amneziawg-amd64-3.1.0.msi",
+      "sha256": "a1b48ea8699cd347832a3691d832004574ef8ad65bcf887611ac8acb99b7de8b",
+      "kind": "msi",
+      "signer": "Privacy Technologies OU",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/amnezia-vpn/amneziawg-windows-client/blob/master/COPYING",
+      "sourceUrl": "https://github.com/amnezia-vpn/amneziawg-windows-client",
+      "arm64": {
+        "url": "https://github.com/amnezia-vpn/amneziawg-windows-client/releases/download/3.1.0/amneziawg-arm64-3.1.0.msi",
+        "sha256": "3aec023884944890fac151f9cd4be3e92d39f9987c49da248837529c006ea2aa"
+      }
+    },
+    {
+      "name": "openvpn",
+      "title": "OpenVPN Community 2.6 (2.7 removed Wintun, which dvpnd needs: UPSTREAM-GAPS #21)",
+      "version": "2.6.23-I002",
+      "url": "https://swupdate.openvpn.net/community/releases/OpenVPN-2.6.23-I002-amd64.msi",
+      "sha256": "31809e97debe44c12be06ed892c2a43e55b67b31cb852827b7ec8f2d6c0b8dc6",
+      "kind": "msi",
+      "signer": "OpenVPN Inc.",
+      "license": "GPL-2.0",
+      "licenseUrl": "https://github.com/OpenVPN/openvpn/blob/release/2.6/COPYING",
+      "sourceUrl": "https://github.com/OpenVPN/openvpn/tree/v2.6.23",
+      "sourceTarballs": [
+        {
+          "what": "OpenVPN 2.6.23 complete source (the program)",
+          "url": "https://swupdate.openvpn.net/community/releases/openvpn-2.6.23.tar.gz",
+          "sha256": "4041c709162bec1325abf5aa8cf27a255cc477c634b15ee310411c701fc40a96"
+        },
+        {
+          "what": "openvpn-build @ tag OpenVPN-2.6.23-I001 (commit 5d4139b) — the Windows installer build scripts for OpenVPN 2.6.23. We ship the I002 installer rebuild (needed: its MSI feature tables are the basis of the ARM64 DCO handling and the ADDLOCAL set, UPSTREAM-GAPS #83/#93); I002 is an untagged rebuild of the same 2.6.23 program, so the I001 tag is the closest PUBLISHED corresponding build scripts (the program source above is the exact 2.6.23). Pinned to the tag's commit via codeload, never HEAD; if GitHub re-rolls the archive the release gate fails loudly and this is re-pinned.",
+          "url": "https://codeload.github.com/OpenVPN/openvpn-build/tar.gz/5d4139bbda6feea5077954bbbb717c256c71ba03",
+          "sha256": "d6258bee0188ea79968d44dad983c31349d083da214f1845eaab38eec8badac9"
+        }
+      ],
+      "arm64": {
+        "url": "https://swupdate.openvpn.net/community/releases/OpenVPN-2.6.23-I002-arm64.msi",
+        "sha256": "1c5e21a537fb920f251de9f842f2582d744901d45a1cc5f1e911eade87b2d63f"
+      }
+    },
+    {
+      "name": "hysteria2",
+      "title": "Hysteria 2",
+      "version": "2.13.0",
+      "url": "https://github.com/apernet/hysteria/releases/download/app/v2.13.0/hysteria-windows-amd64.exe",
+      "sha256": "162ef8fe55dc7ec810dda662908f8e65ec36bd6da39cb87c3bd66184ab68f067",
+      "kind": "exe",
+      "dest": "resources/bin/hysteria2/hysteria2.exe",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/apernet/hysteria/blob/master/LICENSE.md",
+      "sourceUrl": "https://github.com/apernet/hysteria/tree/app/v2.13.0",
+      "arm64": {
+        "url": "https://github.com/apernet/hysteria/releases/download/app/v2.13.0/hysteria-windows-arm64.exe",
+        "sha256": "b22d223025299801cb018cab35120cb8f4f9fe2e73e44b9e60a48963f7dc91e7"
+      }
+    },
+    {
+      "name": "v2ray",
+      "title": "V2Ray",
+      "version": "5.53.0",
+      "url": "https://github.com/v2fly/v2ray-core/releases/download/v5.53.0/v2ray-windows-64.zip",
+      "sha256": "46ee170d031ea3be79cc583e61e6335a612e4c87925deed2a7179b0a5fb79f60",
+      "kind": "zip",
+      "dest": "resources/bin/v2ray",
+      "files": [
+        "v2ray.exe",
+        "geoip.dat",
+        "geosite.dat"
+      ],
+      "license": "MIT",
+      "licenseUrl": "https://github.com/v2fly/v2ray-core/blob/master/LICENSE",
+      "sourceUrl": "https://github.com/v2fly/v2ray-core/tree/v5.53.0",
+      "arm64": {
+        "url": "https://github.com/v2fly/v2ray-core/releases/download/v5.53.0/v2ray-windows-arm64-v8a.zip",
+        "sha256": "163da0c80166f313fd73a36bc4faf16f43f4c25efe4625ce2bb55388d99fd36e"
+      }
+    },
+    {
+      "name": "xray",
+      "title": "Xray",
+      "version": "26.3.27",
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-64.zip",
+      "sha256": "d004c39288ce9ada487c6f398c7c545f7d749e44bdfdd59dbc9f865afba4e1ad",
+      "kind": "zip",
+      "dest": "resources/bin/xray",
+      "files": [
+        "xray.exe",
+        "geoip.dat",
+        "geosite.dat"
+      ],
+      "license": "MPL-2.0",
+      "licenseUrl": "https://github.com/XTLS/Xray-core/blob/main/LICENSE",
+      "sourceUrl": "https://github.com/XTLS/Xray-core/tree/v26.3.27",
+      "arm64": {
+        "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-arm64-v8a.zip",
+        "sha256": "35d4ed6ec21224fb22b07c2c3f672e2350cd536f2c74d309150175a76365ea88"
+      }
+    },
+    {
+      "name": "wintun",
+      "title": "Wintun (for Xray whole-device mode)",
+      "version": "0.14.1",
+      "url": "https://www.wintun.net/builds/wintun-0.14.1.zip",
+      "sha256": "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51",
+      "kind": "zip",
+      "dest": "resources/bin/xray",
+      "files": [
+        "wintun/bin/amd64/wintun.dll",
+        "wintun/LICENSE.txt"
+      ],
+      "signer": "WireGuard LLC",
+      "license": "Wintun Prebuilt Binaries License (redistribution allowed alongside software that uses it via wintun.h)",
+      "licenseUrl": "https://www.wintun.net/",
+      "sourceUrl": "https://git.zx2c4.com/wintun/tag/?h=0.14.1",
+      "arm64": {
+        "files": [
+          "wintun/bin/arm64/wintun.dll",
+          "wintun/LICENSE.txt"
+        ]
+      }
+    }
+  ],
+  "local": [
+    {
+      "name": "sentinel-dvpnd",
+      "title": "Sentinel dVPN daemon (dvpnd)",
+      "version": "fork-cb33-4-final6.1 (02b22fc)",
+      "path": "resources/bin/sentinel-dvpnd.exe",
+      "sha256": "b44c739e912d29089fbed3055f2c9f80ab78f1d77fb0bc8c650dd77ff1b6dcf4",
+      "license": "Sentinel dVPN License",
+      "licenseUrl": "https://github.com/sentinel-official/sentinel-solana/blob/main/LICENSE",
+      "sourceUrl": "https://github.com/sentinel-official/sentinel-solana",
+      "note": "cb33 daemon, fork-cb33-4-final6.1 (02b22fc). final6.1 = final6 630e232 + Q0469 (sentinel-dvpn status no longer blocks >5 s at dvpnd stop/restart: CLI dial deadline) + dvpnd client/node fixes + sidecar path log. final6 630e232 = final5 718d25d + Q0445, Q0453, Q0433, Q0458 (dvpnd key sweep), Q0460, Q0461 (orphan tunnel removed on restart). final5 718d25d = final4.1 + Q0444 (a 10 s network cut no longer ends the session as credit-exhausted [client-side]). Earlier lineage: final3 131d3a2 (final2 9a2e810 + rate-limited chain-read retries [Q0441 PR#62]; TLS handshake uses client timeout; wgcore refused-tool error naming; kill switch off never blocks on reconnect [traffic goes direct]; client delegate check at start+connect [PR#64]) + final4/4.1. ./cmd/sentinel-dvpnd, Go 1.27.3 -trimpath, devnet ldflags (program J52dyXW3, mint Hen2LVP6); built on rc, staged the build host ~/final-cb33-61/bin/windows-{amd64,arm64} (MANIFEST 02b22fc, SHA256SUMS verified); never vendored into this repo",
+      "arm64": {
+        "path": "build/arm64/sentinel-dvpnd.exe",
+        "sha256": "fe2a13d961e5d59bb14e0d8f2d5f9df226f8f6ebf71aa8719e6afd253fa65347"
+      }
+    },
+    {
+      "name": "pipe-bridge",
+      "path": "resources/bin/pipe-bridge.exe",
+      "note": "built from tools/pipe-bridge",
+      "arm64": {
+        "path": "build/arm64/pipe-bridge.exe"
+      }
+    }
+  ],
+  "_builtInto_comment": "Source components statically compiled into our built-from-source local binaries (not separately shipped files). Rendered in THIRD-PARTY-NOTICES under 'Built from source' right after the binary they are compiled into, with full license text where notable.",
+  "builtInto": [
+    {
+      "title": "go-sqlite3-wasm (compiled into sentinel-dvpnd)",
+      "name": "go-sqlite3-wasm",
+      "version": "v6.4.35401",
+      "license": "MIT-0",
+      "licenseUrl": "https://github.com/ncruces/go-sqlite3-wasm/blob/v6.4.35401/LICENSE",
+      "sourceUrl": "https://github.com/ncruces/go-sqlite3-wasm/tree/v6.4.35401",
+      "note": "github.com/ncruces/go-sqlite3-wasm/v6; MIT No Attribution (MIT-0), Copyright (c) 2026 Nuno Cruces; contains a wasm2go machine translation of SQLite 3.54.1 and the ext/misc extensions decimal, ieee754, regexp, series, uint, all public domain (https://sqlite.org/copyright.html)"
+    }
+  ],
+  "_bundled_comment": "Components shipped inside the app itself (the asar / renderer bundle), not downloaded by fetch-deps but still redistributed, so they are listed in THIRD-PARTY-NOTICES. Versions are the pinned values in package.json / package-lock.json.",
+  "bundled": [
+    {
+      "title": "Outfit (variable font, @fontsource-variable/outfit)",
+      "version": "5.3.0",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "sourceUrl": "https://github.com/fontsource/font-files/tree/main/fonts/variable/outfit"
+    },
+    {
+      "title": "JetBrains Mono (variable font, @fontsource-variable/jetbrains-mono)",
+      "version": "5.3.0",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "sourceUrl": "https://github.com/fontsource/font-files/tree/main/fonts/variable/jetbrains-mono"
+    },
+    {
+      "title": "Tomorrow (font, @fontsource/tomorrow)",
+      "version": "5.3.0",
+      "license": "OFL-1.1",
+      "licenseUrl": "https://openfontlicense.org/open-font-license-official-text/",
+      "sourceUrl": "https://github.com/fontsource/font-files/tree/main/fonts/tomorrow"
+    },
+    {
+      "title": "rpc-websockets",
+      "version": "9.3.9",
+      "license": "LGPL-3.0-only",
+      "licenseUrl": "https://github.com/elpheria/rpc-websockets/blob/master/LICENSE",
+      "sourceUrl": "https://github.com/elpheria/rpc-websockets",
+      "note": "used by @solana/web3.js; LGPL-3.0 — relinking permitted: it is an unmodified npm package and may be replaced with another build of the same major version"
+    }
+  ],
+  "_gpl_comment": "GPL-2.0 components (OpenVPN) require an offer of corresponding source. The offer text goes into THIRD-PARTY-NOTICES; the sourceTarballs on the openvpn dep are the corresponding source, verified at release time (fetch-deps --release) which FAILS if any is missing.",
+  "gpl": {
+    "writtenOffer": "This product bundles OpenVPN (GPL-2.0). You may obtain the complete corresponding source code of the exact version bundled for three years from the release date, either from the Source links listed for OpenVPN below, or by request to the project's issue tracker at https://github.com/Sentinel-Bluebuilder/devnet-dvpn (we will point you to a download of the pinned source archive, which is the same code built into the bundled installer)."
+  }
+}
