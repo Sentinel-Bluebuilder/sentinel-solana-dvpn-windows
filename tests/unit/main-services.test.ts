@@ -87,6 +87,13 @@ describe('elevated command line', () => {
     }
   });
 
+  it('accepts the real Windows service name sentinel-dvpnd$c0 and nothing else with $ (Q0478)', () => {
+    expect(elevatedArgLine('x.ps1', { Service: 'sentinel-dvpnd$c0' })).toContain('-Service "sentinel-dvpnd$c0"');
+    for (const bad of ['sentinel-dvpnd$c0;calc', 'sentinel-dvpnd$(calc)', 'x$c0', 'sentinel-dvpnd$', 'sentinel-dvpnd$c0 -Foo']) {
+      expect(() => elevatedArgLine('x.ps1', { Service: bad })).toThrow(/unsafe/);
+    }
+  });
+
   it('prompts (RunAs) only when the caller is not already an administrator', () => {
     const outer = elevatedOuterCommand(elevatedArgLine('C:\\a b\\s.ps1', { Dir: 'C:\\x' }));
     const [adminBranch, userBranch] = outer.split('else');

@@ -147,16 +147,16 @@
     {
       "name": "sentinel-dvpnd",
       "title": "Sentinel dVPN daemon (dvpnd)",
-      "version": "fork-cb33-4-final6.1 (02b22fc)",
+      "version": "fork-cb33-4-final6.5 (90014b2)",
       "path": "resources/bin/sentinel-dvpnd.exe",
-      "sha256": "b44c739e912d29089fbed3055f2c9f80ab78f1d77fb0bc8c650dd77ff1b6dcf4",
+      "sha256": "8203598ab3a3b4d015bdc33e8e17478e33844dccf6c6d48cba1e090c143a0153",
       "license": "Sentinel dVPN License",
       "licenseUrl": "https://github.com/sentinel-official/sentinel-solana/blob/main/LICENSE",
       "sourceUrl": "https://github.com/sentinel-official/sentinel-solana",
-      "note": "cb33 daemon, fork-cb33-4-final6.1 (02b22fc). final6.1 = final6 630e232 + Q0469 (sentinel-dvpn status no longer blocks >5 s at dvpnd stop/restart: CLI dial deadline) + dvpnd client/node fixes + sidecar path log. final6 630e232 = final5 718d25d + Q0445, Q0453, Q0433, Q0458 (dvpnd key sweep), Q0460, Q0461 (orphan tunnel removed on restart). final5 718d25d = final4.1 + Q0444 (a 10 s network cut no longer ends the session as credit-exhausted [client-side]). Earlier lineage: final3 131d3a2 (final2 9a2e810 + rate-limited chain-read retries [Q0441 PR#62]; TLS handshake uses client timeout; wgcore refused-tool error naming; kill switch off never blocks on reconnect [traffic goes direct]; client delegate check at start+connect [PR#64]) + final4/4.1. ./cmd/sentinel-dvpnd, Go 1.27.3 -trimpath, devnet ldflags (program J52dyXW3, mint Hen2LVP6); built on rc, staged the build host ~/final-cb33-61/bin/windows-{amd64,arm64} (MANIFEST 02b22fc, SHA256SUMS verified); never vendored into this repo",
+      "note": "cb33 daemon, fork-cb33-4-final6.5 (90014b2). final6.5 = final6.4 d112ac0 + Q0480 (an idle gap before a fresh request no longer counts as a receive stall) + Q0459 (CLI reports an honest reconnecting state); final6.4 = final6.1 + Q0445 rx-stall fast floor (a tunnel that receives nothing is reported within 2 s). final6.1 = final6 630e232 + Q0469 (sentinel-dvpn status no longer blocks >5 s at dvpnd stop/restart: CLI dial deadline) + dvpnd client/node fixes + sidecar path log. final6 630e232 = final5 718d25d + Q0445, Q0453, Q0433, Q0458 (dvpnd key sweep), Q0460, Q0461 (orphan tunnel removed on restart). final5 718d25d = final4.1 + Q0444 (a 10 s network cut no longer ends the session as credit-exhausted [client-side]). Earlier lineage: final3 131d3a2 (final2 9a2e810 + rate-limited chain-read retries [Q0441 PR#62]; TLS handshake uses client timeout; wgcore refused-tool error naming; kill switch off never blocks on reconnect [traffic goes direct]; client delegate check at start+connect [PR#64]) + final4/4.1. ./cmd/sentinel-dvpnd, Go 1.27.3 -trimpath, devnet ldflags (program J52dyXW3, mint Hen2LVP6); built on the build host from the final6.5 tag (MANIFEST 90014b2, SHA256SUMS verified); never vendored into this repo",
       "arm64": {
         "path": "build/arm64/sentinel-dvpnd.exe",
-        "sha256": "fe2a13d961e5d59bb14e0d8f2d5f9df226f8f6ebf71aa8719e6afd253fa65347"
+        "sha256": "125200cefb408d36552db9ddfee8844e84f3d8aaa526ae7ad66e7e00bcbacb82"
       }
     },
     {

@@ -13,12 +13,15 @@ import { log } from '../logger';
 // Safe: the line sits in a single-quoted PowerShell string and -File passes args literally;
 // no quote, $, ;, ` or & is allowed, so nothing is evaluated.
 const SAFE_ARG = /^[A-Za-z0-9 _.:\\/()-]+$/;
+// The one `$` we need: the Windows service name `sentinel-dvpnd$c0` (instance tag after `$`).
+// Anchored to that exact shape; the single-quoted line never evaluates it (Q0478 SAFE_ARG finding).
+const SERVICE_ARG = /^sentinel-dvpnd\$[a-z0-9]+$/;
 
 export interface ElevatedResult { status: 'ok' | 'error' | 'cancelled'; detail: string; [k: string]: unknown }
 
 /** Double-quoted for the elevated command line. SAFE_ARG has no quotes, so nothing can break out. */
 function dq(s: string): string {
-  if (!SAFE_ARG.test(s)) throw new Error(`refusing unsafe argument for elevated step: ${s}`); // copy:internal
+  if (!SAFE_ARG.test(s) && !SERVICE_ARG.test(s)) throw new Error(`refusing unsafe argument for elevated step: ${s}`); // copy:internal
   return `"${s}"`;
 }
 
