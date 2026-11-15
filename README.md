@@ -23,7 +23,7 @@ Earlier builds (0.2.0, RC1 0.1.0): <https://github.com/Sentinel-Bluebuilder/sent
 ## Status: devnet, unsigned
 
 - Runs on the **Sentinel Solana devnet** only. Devnet tokens have no value; do not use a wallet that holds real funds.
-- The latest release is **0.2.1**, built on the Sentinel Solana fork cut `final6.5` (`90014b2`, based on [sentinel-official/sentinel-solana](https://github.com/sentinel-official/sentinel-solana) `26de5240`). **0.3.0-rc2** is a pre-release candidate for the next version.
+- The latest release is **0.2.1**, built on the Sentinel Solana fork cut `final6.5` (`90014b2`, based on [sentinel-official/sentinel-solana](https://github.com/sentinel-official/sentinel-solana) `26de5240`). **0.3.0-rc2** is a pre-release candidate for the next version, built on fork cut `final6.14` (`0d8410f`, based on upstream `cb33092e`).
 - Builds are **not code-signed by a publisher** (see the platform note below), so the OS will warn on first run. Verify the download against `SHA256SUMS` first.
 
 ## Verify a download
