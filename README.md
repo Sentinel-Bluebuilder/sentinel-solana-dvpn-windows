@@ -17,15 +17,23 @@ Latest release, **v0.2.1**:
 | Sentinel CLI + daemon (x64 / arm64) | `sentinel-dvpn-windows-<arch>.exe`, `sentinel-dvpnd-windows-<arch>.exe` |
 | Checksums | `SHA256SUMS` |
 
-Pre-release **v0.3.0-rc2** (<https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/tag/v0.3.0-rc2>):
-`Devnet-dVPN-Setup-0.3.0-rc.2-x64.exe` and `SHA256SUMS` only (no ARM64 installer, no separate CLI / daemon files).
+Pre-release **v0.3.0-rc4** (<https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/tag/v0.3.0-rc4>):
+`Devnet-dVPN-Setup-0.3.0-rc.4-x64.exe` and `SHA256SUMS` only (no ARM64 installer, no separate CLI / daemon files).
 
 Earlier builds (0.2.0, RC1 0.1.0): <https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases>
+
+## Languages (0.3.0 RC4)
+
+The app speaks 15 languages besides English: Chinese (Simplified), Chinese (Traditional), Spanish, French, Portuguese, Russian, German, Korean, Hindi, Tamil, Indonesian, Malay, Filipino, Thai, Kurdish (Kurmanji). Pick one from the language menu at the bottom left of the sidebar; the choice is kept after a restart. A light | dark switch sits beside it.
+
+RC4 also carries every fix of RC3.1: a second wallet on the same device no longer half-moves it (the switch is a step you confirm), Connect is refused before paying when the clock is off, and refunds list every device of your wallet.
+
+**Known limits:** some status and error messages, the "System language" and "Language" labels, and the installer and Windows prompts still show in English; right-to-left languages (Arabic, Persian, Urdu, Pashto, Sorani) come later; no native speaker has reviewed the translations (the English sentence is the reference); devnet test tokens only.
 
 ## Status: devnet, unsigned
 
 - Runs on the **Sentinel Solana devnet** only. Devnet tokens have no value; do not use a wallet that holds real funds.
-- The latest release is **0.2.1**, built on the Sentinel Solana fork cut `final6.5` (`90014b2`, based on [sentinel-official/sentinel-solana](https://github.com/sentinel-official/sentinel-solana) `26de5240`). **0.3.0-rc2** is a pre-release candidate for the next version, built on fork cut `final6.14` (`0d8410f`, based on upstream `cb33092e`).
+- The latest release is **0.2.1**, built on the Sentinel Solana fork cut `final6.5` (`90014b2`, based on [sentinel-official/sentinel-solana](https://github.com/sentinel-official/sentinel-solana) `26de5240`). **0.3.0-rc4** is a pre-release candidate for the next version, built on fork cut `final6.14` (`0d8410f`, based on upstream `cb33092e`).
 - Builds are **not code-signed by a publisher** (see the platform note below), so the OS will warn on first run. Verify the download against `SHA256SUMS` first.
 
 ## Verify a download
@@ -75,7 +83,7 @@ prompt that a script cannot answer, and with no desktop session they fail.
 
 ```powershell
 $u = 'https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/download/v0.3.0-rc2'
-$f = 'Devnet-dVPN-Setup-0.3.0-rc.2-x64.exe'
+$f = 'Devnet-dVPN-Setup-0.3.0-rc.4-x64.exe'
 curl.exe -fsSLo $f "$u/$f"                     # curl.exe, not curl (an alias in older PowerShell)
 curl.exe -fsSLo SHA256SUMS "$u/SHA256SUMS"
 $h = ((Select-String -Path .\SHA256SUMS -SimpleMatch " $f").Line -split '\s+')[0]       # the line for this file
