@@ -74,7 +74,7 @@ Run the installer, start **Devnet dVPN**, and follow the first-run setup (it cre
 
 ### From the command line (scripts, SSH, AI agents)
 
-Use **v0.3.0-rc2** (x64 only; there is no ARM64 build of it yet). The older v0.2.1 cannot make a
+Use **v0.3.0-rc4** (x64 only; there is no ARM64 build of it yet). The older v0.2.1 cannot make a
 key file, which you need over SSH: Windows cannot unlock a stored wallet there.
 
 Run everything in an **elevated** PowerShell (an elevated terminal, or SSH as an administrator).
@@ -82,7 +82,7 @@ The installer and `daemon install` change the whole machine. From a normal shell
 prompt that a script cannot answer, and with no desktop session they fail.
 
 ```powershell
-$u = 'https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/download/v0.3.0-rc2'
+$u = 'https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/download/v0.3.0-rc4'
 $f = 'Devnet-dVPN-Setup-0.3.0-rc.4-x64.exe'
 curl.exe -fsSLo $f "$u/$f"                     # curl.exe, not curl (an alias in older PowerShell)
 curl.exe -fsSLo SHA256SUMS "$u/SHA256SUMS"
