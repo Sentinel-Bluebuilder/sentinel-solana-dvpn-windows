@@ -107,6 +107,8 @@ another way in, such as the cloud console.
 
 Source: this tree is the source of v0.3.0, exported from commit 82ef4a4ccb331ada3602dd5674ee66d8936a0f9f (the commit the v0.3.0 installer was built from).
 
+Comments, test titles and docs have internal project and team labels replaced. Besides those, 6 lines differ from commit 82ef4a4c, none of them in the app (`src/`): the GPL written offer in `build/deps.lock.json` names this repository's issue tracker, `scripts/i18n-banned.mjs` (a developer check) no longer defaults to a private file path, and 4 lines of `tests/unit/windows-account.test.ts` use the placeholder account name `user`.
+
 ```bash
 npm ci
 npm run typecheck
