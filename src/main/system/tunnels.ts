@@ -3,9 +3,11 @@
 // (or AmneziaWG) service keeps the default route, so the computer is offline with no session
 // to stop. "Restore network" removes such services; it never touches a user's own tunnels.
 import { execFile } from 'node:child_process';
+import { scStateNumber } from '../../core/daemon/service-state';
 import { log } from '../logger';
 import { runElevated } from './elevate';
 import { scriptPath } from '../daemon/manager';
+import { tr } from '../../shared/i18n';
 
 const OURS = /^(WireGuardTunnel|AmneziaWGTunnel)\$dvpn-/i;
 
@@ -14,7 +16,7 @@ export function parseTunnelServices(scOutput: string): string[] {
   const out: string[] = [];
   for (const block of scOutput.split(/\r?\n\s*\r?\n/)) {
     const name = /SERVICE_NAME:\s*(\S+)/.exec(block)?.[1];
-    if (name && OURS.test(name) && /STATE\s*:\s*\d+\s+(RUNNING|START_PENDING)/.test(block)) out.push(name);
+    if (name && OURS.test(name) && [2, 4].includes(scStateNumber(block) ?? 0)) out.push(name);
   }
   return out;
 }
@@ -37,7 +39,7 @@ export async function removeTunnelServices(): Promise<{ ok: boolean; detail: str
   return { ok: r.status === 'ok', detail: r.detail };
 }
 
-// ─── Orphaned protocol processes (UPSTREAM-GAPS the Linux app) ───
+// ─── Orphaned protocol processes (UPSTREAM-GAPS #32) ───
 // When dvpnd dies, its hysteria2 / v2ray / xray child keeps running and keeps the tunnel (and,
 // for per-hour channels, the bill) going, while the kill-switch filters die with dvpnd. These
 // names are only ever run from the app's own folder; the elevated step checks the path again.
@@ -51,6 +53,26 @@ export function parseOrphanProcesses(csv: string): string[] {
     if (name && ORPHAN_NAMES.test(name[1])) out.push(`${name[1]}:${name[2]}`);
   }
   return out;
+}
+
+/**
+ * CODE-AUDIT U-27b: true when any openvpn.exe runs. Unelevated, a SYSTEM process's command line is hidden, so dvpnd's
+ * OpenVPN cannot be told from a user's own here; it is not a leftover for the passive checks (a false banner), but
+ * Restore network, which the user asked for, runs the elevated step for it, and that step stops only dvpnd's.
+ * Exported for tests.
+ */
+export function parseOpenvpnRunning(csv: string): boolean {
+  return csv.split(/\r?\n/).some((line) => /^"openvpn\.exe","\d+"/i.test(line));
+}
+
+export function openvpnRunning(): Promise<boolean> {
+  if (process.platform !== 'win32') return Promise.resolve(false);
+  return new Promise((resolve) => {
+    execFile('tasklist.exe', ['/FO', 'CSV', '/NH', '/FI', 'IMAGENAME eq openvpn.exe'], { timeout: 15_000, windowsHide: true }, (err, stdout) => {
+      if (err && !stdout) { log.warn('tasklist failed; cannot look for a leftover OpenVPN', { err: err.message }); resolve(false); return; }
+      resolve(parseOpenvpnRunning(String(stdout)));
+    });
+  });
 }
 
 /** Our protocol processes running now (unelevated; names only). */
@@ -107,10 +129,10 @@ export function rivalVpns(): Promise<string[]> {
 /** Doctor row: ok when no other VPN holds the default route, warn with plain copy when one does. */
 export async function rivalVpnRow(): Promise<{ name: string; ok: boolean; level: 'ok' | 'warn'; detail: string }> {
   const rivals = await rivalVpns();
-  if (rivals.length === 0) return { name: 'other_vpn', ok: true, level: 'ok', detail: 'No other VPN is active.' };
+  if (rivals.length === 0) return { name: 'other_vpn', ok: true, level: 'ok', detail: tr('No other VPN is active.') };
   return {
     name: 'other_vpn', ok: true, level: 'warn',
-    detail: `Another VPN is on (${rivals.join(', ')}). Turn it off before you connect: two VPNs fight over the same traffic and yours may carry nothing.`,
+    detail: tr('Another VPN is on ({join}). Turn it off before you connect: two VPNs fight over the same traffic and yours may carry nothing.', { join: rivals.join(', ') }),
   };
 }
 
@@ -118,4 +140,12 @@ export async function rivalVpnRow(): Promise<{ name: string; ok: boolean; level:
 export async function leftoverTunnels(): Promise<string[]> {
   const [svc, proc] = await Promise.all([runningTunnelServices(), runningProtocolProcesses()]);
   return [...svc, ...proc];
+}
+
+/**
+ * Restore network also sweeps leftover network state that only an elevated step can see (Linux Q0239).
+ * Windows: no — the sweep would add a UAC prompt to every Restore network (all-OS port 2026-11-12).
+ */
+export function restoreNetworkSweep(): boolean {
+  return false;
 }

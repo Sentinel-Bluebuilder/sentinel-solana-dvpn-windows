@@ -5,6 +5,7 @@ import { disconnect } from '../services/connection';
 import { connectActionButton } from '../../shared/connect-action';
 import { EVENTS } from '../../shared/ipc';
 import { log } from '../logger';
+import { tr } from '../../shared/i18n';
 
 let tray: Tray | null = null;
 let winRef: (() => BrowserWindow | null) | null = null;
@@ -55,13 +56,13 @@ export function updateTray(): void {
   };
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: s.conn.title, enabled: false },
-    ...(last ? [{ label: last.code === 'cancelled' ? 'Connecting stopped' : 'Last connect failed', enabled: false }] : []),
+    ...(last ? [{ label: last.code === 'cancelled' ? tr('Connecting stopped') : tr('Last connect failed'), enabled: false }] : []),
     ...(next ? [{ label: `${next.label}…`, click: openHome }] : []),
     { type: 'separator' },
-    { label: 'Open', click: show },
-    { label: 'Disconnect', enabled: !!s.session, click: () => void disconnect() },
+    { label: tr('Open'), click: show },
+    { label: tr('Disconnect'), enabled: !!s.session, click: () => void disconnect() },
     { type: 'separator' },
-    { label: 'Quit', click: () => { quitting = true; app.quit(); } },
+    { label: tr('Quit'), click: () => { quitting = true; app.quit(); } },
   ]));
 }
 

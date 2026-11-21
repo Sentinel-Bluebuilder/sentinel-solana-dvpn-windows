@@ -112,7 +112,7 @@ export class DaemonClient {
     return r.session;
   }
 
-  /** keepKillSwitch: a new session follows at once (server switch), so dvpnd keeps the block (gap #67, rc+; older dvpnd ignores it). */
+  /** keepKillSwitch: a new session follows at once (server switch), so dvpnd keeps the block (gap #67, ddv18+; older dvpnd ignores it). */
   async stopSession(id: string, opts: { keepKillSwitch?: boolean } = {}): Promise<StopResult> {
     const md = new grpc.Metadata();
     if (opts.keepKillSwitch) md.set('x-keep-kill-switch', '1');

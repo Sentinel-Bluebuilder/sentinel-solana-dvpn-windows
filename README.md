@@ -108,6 +108,8 @@ another way in, such as the cloud console.
 
 ## Build from source
 
+Source: this tree is the source of v0.3.0, exported from commit 82ef4a4ccb331ada3602dd5674ee66d8936a0f9f (the commit the v0.3.0 installer was built from).
+
 ```bash
 npm ci
 npm run typecheck
@@ -116,4 +118,4 @@ npm run package:win        # installer into dist/
 npm run build:cli          # then: npm run cli -- help
 ```
 
-Docs: [architecture](docs/ARCHITECTURE.md), [CLI](docs/CLI.md), [design](docs/DESIGN.md), [network safety](docs/NETWORK-SAFETY.md).
+Docs: [architecture](docs/ARCHITECTURE.md), [CLI](docs/CLI.md), [design](docs/DESIGN.md).

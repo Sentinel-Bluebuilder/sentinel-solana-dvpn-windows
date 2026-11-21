@@ -10,6 +10,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import { readJson, writeJson, storePath } from '../store';
 import { log } from '../logger';
+import { ShownError } from '../../shared/i18n';
 import { patch } from '../app-state';
 import { checkSocks5 } from '../../core/quality/socks-check';
 import { scriptPath } from '../daemon/manager';
@@ -20,6 +21,7 @@ const BACKUP = 'proxy-backup.json';
 export interface ProxyState { flags: number; server: string; bypass: string; pac: string }
 export const PROXY_DIRECT = 1;
 export const PROXY_MANUAL = 2;
+export const PROXY_PAC = 4;
 
 /** On disk. Backups written before 2026-10-21 hold the registry form (proxyEnable/proxyServer). */
 interface Saved { state?: ProxyState; proxyEnable?: number; proxyServer?: string | null; ours: string }
@@ -60,9 +62,22 @@ export function setSocksCheck(c: typeof checkSocks5): void {
   socksCheck = c;
 }
 
-/** What we set: SOCKS for every proxy-aware app, local addresses direct. */
+/**
+ * What we set: a PAC script sending every proxy-aware app to the session's SOCKS5, local names direct.
+ * Q0537 (DVPN-WIN, Edge headless, kill switch persist + V2Ray/Xray proxy): the manual entry
+ * 'socks=host:port' is SOCKS v4 to Chromium, which resolves names ITSELF; the kill switch blocks that
+ * DNS, so every Chromium browser was offline while the app said "Protected in browsers". "SOCKS5" from a
+ * PAC resolves names through the proxy (node exit on both cores, and no DNS leak with the kill switch
+ * off either). A data: URL needs no local server; Edge ignores file: PAC URLs.
+ */
+export function pacFor(endpoint: string): string {
+  return `${PAC_PREFIX}function FindProxyForURL(u,h){if(isPlainHostName(h)||h=="localhost"||shExpMatch(h,"127.*")||h=="[::1]")return "DIRECT";return "SOCKS5 ${endpoint}";}`;
+}
+export const PAC_PREFIX = 'data:application/x-ns-proxy-autoconfig,';
+const OUR_PAC = /^data:application\/x-ns-proxy-autoconfig,.*return "SOCKS5 127\.0\.0\.1:\d{2,5}";\}$/;
+
 export function oursFor(endpoint: string): ProxyState {
-  return { flags: PROXY_DIRECT | PROXY_MANUAL, server: `socks=${endpoint}`, bypass: '<local>', pac: '' };
+  return { flags: PROXY_DIRECT | PROXY_PAC, server: '', bypass: '', pac: pacFor(endpoint) };
 }
 
 /** No proxy: what a user gets back when the only thing to restore was our own proxy. */
@@ -74,7 +89,9 @@ export const DIRECT_STATE: ProxyState = { flags: PROXY_DIRECT, server: '', bypas
  * the ProxyEnable registry value while the per-connection setting kept our SOCKS), every later
  * "proxy off" put the proxy back on, and with no session every WinINET app had no internet (wx1, twice).
  */
-export function isOurs(s: Pick<ProxyState, 'flags' | 'server'>): boolean {
+export function isOurs(s: Pick<ProxyState, 'flags' | 'server'> & { pac?: string }): boolean {
+  // The PAC form (Q0537), or the manual SOCKS form older versions set: a leftover of those is still ours.
+  if ((s.flags & PROXY_PAC) && OUR_PAC.test((s.pac ?? '').trim())) return true;
   return !!(s.flags & PROXY_MANUAL) && /^socks=127\.0\.0\.1:\d{2,5}$/.test(s.server.trim());
 }
 
@@ -89,16 +106,16 @@ export async function setSystemProxy(endpoint: string): Promise<void> {
   if (!/^127\.0\.0\.1:\d{2,5}$/.test(endpoint)) throw new Error(`refusing non-loopback proxy endpoint ${endpoint}`); // copy:internal
   // A dead proxy as the system proxy cuts every app's internet: prove it works here first.
   const live = await socksCheck(endpoint);
-  if (!live.ok) throw new Error(`The VPN's SOCKS proxy is not answering on this computer (${live.reason}). Nothing was changed.`);
+  if (!live.ok) throw new ShownError('The VPN\'s SOCKS proxy is not answering on this computer ({reason}). Nothing was changed.', { reason: live.reason });
   const ours = oursFor(endpoint);
   if (!fs.existsSync(storePath(BACKUP))) {
     const before = await runner.query();
     if (isOurs(before)) log.warn('system proxy: found our own SOCKS proxy left on; saving direct as the setting to restore', { server: before.server });
-    const saved: Saved = { state: isOurs(before) ? DIRECT_STATE : before, ours: ours.server };
+    const saved: Saved = { state: isOurs(before) ? DIRECT_STATE : before, ours: ours.pac };
     writeJson(BACKUP, saved);
   }
   const now = await runner.set(ours);
-  if (now.server !== ours.server || !(now.flags & PROXY_MANUAL)) throw new Error('Windows did not accept the proxy setting. Nothing else was changed.');
+  if (now.pac !== ours.pac || !(now.flags & PROXY_PAC)) throw new ShownError('Windows did not accept the proxy setting. Nothing else was changed.');
   patch({ proxyActive: true });
   log.info('system proxy set', { endpoint });
 }

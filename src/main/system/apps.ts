@@ -6,6 +6,13 @@ import { log } from '../logger';
 import { scriptPath } from '../daemon/manager';
 import { mergeApps, type AppEntry, type RawProcess, type RawShortcut } from '../../core/split/apps';
 
+/** The split-tunnel file picker for this OS (shared ipc APPS_PICK). */
+export const APP_PICK_DIALOG = { filters: [{ name: 'Programs', extensions: ['exe'] }] };
+/** Windows: the exact path the dialog returns (dvpnd matches app paths case-sensitively). */
+export async function resolvePickedApp(p: string): Promise<{ path: string } | { code: string; error: string }> {
+  return { path: p };
+}
+
 export interface AppsView { supported: boolean; apps: AppEntry[]; error: string | null }
 
 /** ConvertTo-Json writes a one-element array as a bare object; normalise both. */

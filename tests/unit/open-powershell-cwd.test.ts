@@ -1,5 +1,5 @@
 // ─── Q0295 #3: Open in PowerShell starts a shell from the installed app ───
-// rc (fresh Azure-2, lab-0bb7b3b): the click started no process at all. The shell's cwd was the CLI
+// ddv2-wx1 (fresh Azure-2, lab-0bb7b3b): the click started no process at all. The shell's cwd was the CLI
 // folder inside app.asar (a file, not a folder), so the spawn failed after openPowerShell had returned ok.
 import { EventEmitter } from 'node:events';
 import os from 'node:os';

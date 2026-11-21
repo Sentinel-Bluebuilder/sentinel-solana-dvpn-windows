@@ -41,7 +41,7 @@ describe('nodeapi', () => {
     expect(verifySignedMetadata(prov, JSON.parse(prov), DOMAIN_PROVIDER_METADATA)).toBe(true);
     expect(verifySignedMetadata(prov, JSON.parse(prov))).toBe(false);
   });
-  // Live replies captured from test-host (dvpnd cf4c372-rc) on 2026-10-21. They expire, but the signature does not.
+  // Live replies captured from ddv-node-1 (dvpnd cf4c372-ddv1) on 2026-10-21. They expire, but the signature does not.
   it('verifies real cf4c372 node and provider metadata', () => {
     for (const [file, doms] of [['node-metadata.cf4c372.json', DOMAIN_NODE_METADATA], ['provider-metadata.cf4c372.json', DOMAIN_PROVIDER_METADATA]] as const) {
       const text = readFileSync(`tests/fixtures/${file}`, 'utf8');
@@ -122,7 +122,7 @@ describe('session state', () => {
     expect(connectErrorCopy('Post "https://x": x509: certificate signed by unknown authority').code).toBe('rpc-network');
   });
   it('a node API that refuses before any deposit is "not answering, nothing was paid" (the Linux app d590ee4b)', () => {
-    const c = connectErrorCopy('fetching node metadata from https://203.0.113.1:18713: Get "https://203.0.113.1:18713/v1/metadata": dial tcp 203.0.113.1:18713: connect: connection refused');
+    const c = connectErrorCopy('fetching node metadata from https://35.232.17.117:18713: Get "https://35.232.17.117:18713/v1/metadata": dial tcp 35.232.17.117:18713: connect: connection refused');
     expect(c.code).toBe('node-offline');
     expect(c.message).toMatch(/nothing was paid/);
     expect(connectErrorCopy('fetching node metadata from https://1.2.3.4:1: context deadline exceeded').code).toBe('timeout');

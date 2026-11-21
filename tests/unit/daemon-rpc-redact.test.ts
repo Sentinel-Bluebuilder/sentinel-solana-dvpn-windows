@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { redactRpcUrl } from '../../src/core/daemon/config';
 
-// QA-M6: a user-set RPC URL can carry a gate token. The `daemon set` confirm echo and the
+// FMC-M6: a user-set RPC URL can carry a gate token. The `daemon set` confirm echo and the
 // readable `daemon settings` print both route rpcUrl/rpcWsUrl through redactRpcUrl, so the token
 // must never reach the terminal or logs — while scheme+host stay visible for verification.
-describe('redactRpcUrl (QA-M6)', () => {
+describe('redactRpcUrl (FMC-M6)', () => {
   it('masks a query-param gate token but keeps the host', () => {
     const out = redactRpcUrl('https://devnet.example-rpc.test/?api-key=SUPERSECRET');
     expect(out).not.toContain('SUPERSECRET');

@@ -62,7 +62,7 @@ function extractZip(zip, dest, files) {
   try {
     // Windows' own bsdtar (Windows 10+) reads zip; Git Bash's GNU tar would take "C:" for a host.
     // Elsewhere (a Linux build box) GNU tar can't read zip at all ("does not look like a tar
-    // archive", windows-arm on a Linux build host): use unzip there.
+    // archive", windows-arm on stasis-ops 2026-10-24): use unzip there.
     if (process.platform === 'win32') {
       execFileSync(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', zip, '-C', tmp], { stdio: 'inherit' });
     } else {

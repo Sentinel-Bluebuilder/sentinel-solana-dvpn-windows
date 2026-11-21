@@ -3,7 +3,7 @@ import net from 'node:net';
 import { internetReachable, reachTargets, tcpDial } from '../../src/core/quality/reachability';
 
 describe('reachability (F14.3)', () => {
-  it('never probes the RPC hosts: the kill switch leaves them open since rc (VM ui-win-1)', () => {
+  it('never probes the RPC hosts: the kill switch leaves them open since ddv18 (VM ui-win-1)', () => {
     expect(reachTargets(['https://rpc.example.org/x?k=1', 'http://127.0.0.1:8899', 'nope'])).toEqual([
       ['www.msftconnecttest.com', 80], ['1.1.1.1', 443], ['8.8.8.8', 443],
     ]);

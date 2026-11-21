@@ -26,3 +26,16 @@ describe('Handshake DNS preset (Q0267)', () => {
     for (const p of Object.values(DNS_PRESETS)) expect(p.servers.length).toBeLessThanOrEqual(4);
   });
 });
+
+// Wiring (lesson of Q0271: a helper test passes even when the caller never uses it).
+import { parseSettings } from '../../src/core/daemon/config';
+
+describe('parseSettings upgrades a saved Handshake list (Q0267)', () => {
+  const client = (list: string[]): string => `[network]\ndns_servers = [${list.map((s) => `"${s}"`).join(', ')}]\n`;
+  it('an install saved with the 2-server Handshake list reads as the current preset', () => {
+    expect(parseSettings('', client(OLD_HANDSHAKE)).dnsServers).toEqual(DNS_PRESETS.handshake.servers);
+  });
+  it('a custom list is read as written', () => {
+    expect(parseSettings('', client(['9.9.9.9', '1.1.1.1'])).dnsServers).toEqual(['9.9.9.9', '1.1.1.1']);
+  });
+});

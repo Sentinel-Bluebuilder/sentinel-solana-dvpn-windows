@@ -70,7 +70,7 @@ row actions and tabs 32 px (`.btn-sm`, `.tab`), radius 10 px.
   on top of the main panel (RPC warning, low funds, Restore network).
 - Onboarding and welcome: split screen, brand story left, steps right (one-shot standard).
 - Home: connection card (ring + state + one primary action), then one stat strip, then chips
-  (IP · protocol · DNS · country) while connected, then "Your servers" (favourites + recent, or
+  (IP · protocol · DNS · country) while connected, then "Recently connected" (favourites + recent, or
   the fastest online) with one-click Connect, so the window is never half empty.
 - Servers: search grows, protocol / pricing / sort selects, Online / Favourites / Recent as toggle
   chips; countries with a chevron, flag, `online/total` and the protocol logos that country offers
@@ -91,9 +91,56 @@ row actions and tabs 32 px (`.btn-sm`, `.tab`), radius 10 px.
 - **Noise folds:** lists put rows that need action first and fold the rest into one line
   (Activity deposits).
 
+## System (UI pass 2026-11)
+
+**Principles.** One screen, one job, one primary action. State is always visible: protected,
+not protected and blocked differ by colour, icon and word together. Nothing moves unless you moved
+it. Money is said in plain numbers before anything is paid. The app does the work (starts the
+service, retries, refunds); the user is asked only for decisions. Advanced detail is one click
+away. One accent; colour means state; motion means change.
+
+**Shared parts (`components/`), all shown in every state on the gallery page `#gallery`:**
+
+| Part | Rule |
+|---|---|
+| `Sheet` | The one dialog shell: same scrim, enter motion, Esc, click outside when idle, focus in and back, scroll lock. `ConfirmModal` and `ConnectSheet` sit on it; a failure is said inside the dialog (`InlineError`). |
+| `Banner` + `BannerStack` | Tone = icon + colour. One stack above a page: most serious first, two at most in the shell, one on Connect; a banner opens and closes its own height in 180 ms. |
+| `Toasts` (`core/app/notify-rules.ts`) | Title, one line, optional action, close. Same key replaces; three visible, rest folded; errors with an action stay; nothing is shown that the current screen already shows. |
+| `SessionCard` (`core/session/status-card.ts`) | One card, one height in every state; used by the sidebar, the phone header and the More list; a click opens Connect. |
+| `ApplyBar` | The one sticky apply bar: a note that says what applying costs, Discard, Apply. |
+| `RadioCards` | The one radio group: native inputs, a card per choice, a disabled card says why. |
+| `RestoreNetworkButton` | The one red button: shows it is working, says a failure next to itself. |
+| `Term` (`core/app/help-copy.ts`) | A word with its (?) explanation. One table of explanations for the whole app. |
+| `Icon` | One stroked set; no text glyphs as icons. |
+
+**Connect screen (`core/session/connect-stage.ts`).** Stages: Getting ready, Deposit, Connecting,
+Checking, Protected, plus Not protected, Reconnecting, Ending and Problem. A status text stays at
+least 700 ms (`lib/use-settled.ts`); urgent states (blocked internet, a problem) show at once. The
+hero has fixed slots (label, one-line title, two-line detail, one action row); the session's rows
+are on the page, empty, from the first stage. The gallery replays every stage on one mounted
+screen (`#gallery/connect/<id>`) and the screenshot run fails if anything moves.
+
+**Navigation.** A page opens at its top; Back restores where you were. A filter, a sort or an
+open tab is kept with `lib/use-kept.ts`. `go(screen, section)` scrolls to and outlines the part
+marked `data-section`. Confirming a connect goes to the Connect screen.
+
 ## Copy
 
-- Plain words: "server" not "node" in the app UI; "deposit", "refund", "spending permission".
+**Glossary (enforced on the main screens by `tests/unit/copy-glossary.test.ts`):**
+
+| Say | Never on screen |
+|---|---|
+| server (the page name **Node test** stays) | node |
+| deposit, "on deposit" | lock, escrow, channel, open deposit |
+| refund | settle, settlement, rent |
+| spending limit | allowance, grant, token permission, spending permission |
+| VPN service | daemon, dvpnd |
+| this computer / this phone | "device" for the machine |
+| plan access | ticket |
+| network fees | lamports, rent |
+| Solana connection | RPC (only as a field label in Settings, explained) |
+
+- Plain words: "server" not "node" in the app UI; "deposit", "refund", "spending limit".
 - Never raw errors on screen; the raw text goes to the log (`link-copy.ts`, `state.ts`).
 - Country names from the standard map (`core/nodes/country.ts`): short display names
   (United States, United Kingdom, Hong Kong, DR Congo, Turkey), flags as images.

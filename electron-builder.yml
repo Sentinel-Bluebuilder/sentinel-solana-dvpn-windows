@@ -13,6 +13,8 @@ files:
 # to plain JS when their binary does not load, and rebuilding them for ARM64 needs Python + the ARM64
 # C++ toolchain on the build machine. Same JS path on both CPU types (proven by ui-smoke on each).
 npmRebuild: false
+# rc.9 (Windows testing): drop build leftovers for other systems (node_gyp_bins, other prebuilds) and fail on any ELF / Mach-O.
+afterPack: scripts/after-pack.cjs
 # build/stage/<arch>/resources (scripts/fetch-deps.mjs --arch) = dvpnd + protocol binaries (bin/), driver installers (deps/), PowerShell helpers (scripts/)
 extraResources:
   - from: build/stage/${arch}/resources

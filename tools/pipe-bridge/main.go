@@ -11,6 +11,9 @@
 // Contract with the app:
 //   - prints "ready <pipe path>" on stdout once listening;
 //   - exits when stdin closes (the app owns its lifetime);
+//   - task mode (-parent + -ready-file): started by Task Scheduler under a fresh S4U sign-in of the
+//     same user, so it holds a group the user joined after signing in (no sign-out needed). It
+//     writes "ready <pipe path>" to -ready-file and exits when process -parent (the app) exits;
 //   - the listen path carries a random suffix and is created first-instance,
 //     so another process cannot squat it.
 package main
@@ -37,7 +40,19 @@ const daemonClientRights = 0x120183 // must not exceed the ACE dvpnd grants sock
 
 func main() {
 	daemon := flag.String("daemon", `\\.\pipe\ProtectedPrefix\Administrators\dvpnd\client`, "dvpnd control pipe")
+	parent := flag.Int("parent", 0, "task mode: exit when this process exits")
+	readyFile := flag.String("ready-file", "", "task mode: write the ready line here instead of stdout")
+	grant := flag.String("grant", "", "admin step: let this user SID open the daemon pipe now, then exit")
 	flag.Parse()
+	if *grant != "" {
+		if err := grantPipe(*daemon, *grant); err != nil {
+			fail("granting %s on %s: %v", *grant, *daemon, err)
+		}
+		return
+	}
+	if (*parent == 0) != (*readyFile == "") {
+		fail("-parent and -ready-file go together")
+	}
 
 	sid, err := currentUserSID()
 	if err != nil {
@@ -64,10 +79,34 @@ func main() {
 		_ = probe.Close()
 	}
 
-	fmt.Printf("ready %s\n", listen)
-
 	var closing atomic.Bool
+	if *parent != 0 {
+		h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(*parent))
+		if err != nil {
+			fail("watching app process %d: %v", *parent, err)
+		}
+		tmp := *readyFile + ".tmp"
+		if err := os.WriteFile(tmp, []byte("ready "+listen+"\n"), 0o600); err != nil {
+			fail("writing %s: %v", tmp, err)
+		}
+		if err := os.Rename(tmp, *readyFile); err != nil {
+			fail("writing %s: %v", *readyFile, err)
+		}
+		go func() {
+			_, _ = windows.WaitForSingleObject(h, windows.INFINITE)
+			closing.Store(true)
+			_ = os.Remove(*readyFile)
+			_ = ln.Close()
+			os.Exit(0)
+		}()
+	} else {
+		fmt.Printf("ready %s\n", listen)
+	}
+
 	go func() {
+		if *parent != 0 {
+			return // no stdin under Task Scheduler; the app process is watched above
+		}
 		// The app holds our stdin; when it goes away, so do we.
 		_, _ = io.Copy(io.Discard, bufio.NewReader(os.Stdin))
 		closing.Store(true)

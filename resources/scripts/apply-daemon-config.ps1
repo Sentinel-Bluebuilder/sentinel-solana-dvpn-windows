@@ -9,9 +9,15 @@ param(
   [Parameter(Mandatory = $true)][string]$Staged,
   [Parameter(Mandatory = $true)][string]$DaemonHome,
   [string]$Service = 'sentinel-dvpnd$c0',
-  [string]$Result
+  [string]$Result,
+  # Re-grant the app user the pipe after the restart (grant-pipe.ps1); both empty = skip.
+  [string]$Bridge = '',
+  [string]$User = ''
 )
 $ErrorActionPreference = 'Stop'
+# rc9-c D1-D3 (staging-guard.ps1): the staged folder is checked and read once into an admin-only snapshot.
+. (Join-Path $PSScriptRoot 'staging-guard.ps1')
+$snap = ''
 
 function Write-Result([string]$status, [string]$detail) {
   if ($Result) {
@@ -20,7 +26,34 @@ function Write-Result([string]$status, [string]$detail) {
   }
 }
 
+# Q0544 (Windows): never overwrite a live config in place. A copy cut by power loss / a VM preemption left
+# config.toml empty or half-written. Write <dst>.new in the same folder, flush it to disk, then swap it in
+# with ReplaceFile (atomic on one NTFS volume; keeps dst's ACL). dst is always a file that exists here.
+function Install-FileAtomic([string]$From, [string]$To) {
+  $tmp = "$To.new"
+  Copy-Item -LiteralPath $From -Destination $tmp -Force
+  $fs = [System.IO.File]::Open($tmp, 'Open', 'ReadWrite', 'None')
+  try { $fs.Flush($true) } finally { $fs.Dispose() }
+  try {
+    [System.IO.File]::Replace($tmp, $To, [NullString]::Value)
+  } catch {
+    Write-Warning "atomic replace of $To failed ($($_.Exception.Message)); moving instead"
+    Move-Item -LiteralPath $tmp -Destination $To -Force
+  }
+}
+
 try {
+  # rc9-c D2/D3: each expected file is read ONCE, links refused, into $snap; every check, the copy and the rollback
+  # below read the snapshot (the user owns the staged folder for the whole 30 s service stop).
+  # rc9-c D5: only this app's service (the grant-pipe.ps1 check).
+  if ($Service -notmatch '^sentinel-dvpnd\$([a-z0-9]+)$') { throw "unexpected service name $Service" }
+  $Staged = Assert-StagingPath $Staged @('staged')
+  $snap = New-StagingSnapshotDir
+  foreach ($n in @('config.toml', 'v2ray.config.toml', 'xray.config.toml')) {
+    $f = Join-Path $Staged $n
+    if (Test-Path -LiteralPath $f) { Copy-StagedFile $f (Join-Path $snap $n) 65536 }
+  }
+  $Staged = $snap
   # cb33 layout: ONE instance config.toml; V2Ray/Xray in <home>\<service>\config.toml.
   $pairs = @(
     @{ src = Join-Path $Staged 'config.toml'; dst = Join-Path $DaemonHome 'config.toml' }
@@ -42,14 +75,14 @@ try {
   $svc = Get-Service -Name $Service -ErrorAction SilentlyContinue
   if ($svc -and $svc.Status -ne 'Stopped') {
     # The service reports Stopped before its process has exited; a new dvpnd started while the old
-    # one still holds its files exits at once ("Incorrect function", test-host cli187). Wait for it.
+    # one still holds its files exits at once ("Incorrect function", ddv-win-2 cli187). Wait for it.
     $oldPid = (Get-CimInstance Win32_Service -Filter "Name='$Service'").ProcessId
     Stop-Service -Name $Service -Force
     $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
     if ($oldPid) { Wait-Process -Id $oldPid -Timeout 30 -ErrorAction SilentlyContinue }
   }
 
-  foreach ($p in $pairs) { Copy-Item -LiteralPath $p.src -Destination $p.dst -Force }
+  foreach ($p in $pairs) { Install-FileAtomic $p.src $p.dst }
   # Re-apply the home lock: it also fixes homes set up before lock-daemon-home.ps1 existed.
   try {
     & (Join-Path $PSScriptRoot 'lock-daemon-home.ps1') -DaemonHome $DaemonHome | Out-Null
@@ -73,7 +106,7 @@ try {
       Start-Sleep -Seconds 3
     }
     if ($lastErr) {
-      foreach ($p in $pairs) { Copy-Item -LiteralPath "$($p.dst).bak" -Destination $p.dst -Force }
+      foreach ($p in $pairs) { Install-FileAtomic "$($p.dst).bak" $p.dst }
       for ($try = 1; $try -le 3; $try++) {
         Start-Service -Name $Service -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
@@ -82,9 +115,19 @@ try {
       throw "service failed to start with the new settings; previous settings restored: $lastErr"
     }
   }
+  # The restart dropped any direct pipe grant; a user not yet signed in again needs it back.
+  if ($svc -and $Bridge -and $User) {
+    try {
+      & (Join-Path $PSScriptRoot 'grant-pipe.ps1') -Bridge $Bridge -User $User -Service $Service | Out-Null
+    } catch {
+      Write-Warning "pipe grant failed: $($_.Exception.Message)"
+    }
+  }
+  Remove-StagingTree $snap
   Write-Result 'ok' ($(if ($svc) { 'applied and restarted' } else { 'applied (no service installed)' }))
   exit 0
 } catch {
+  if ($snap) { Remove-StagingTree $snap }
   Write-Result 'error' $_.Exception.Message
   exit 1
 }

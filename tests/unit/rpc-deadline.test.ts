@@ -42,7 +42,7 @@ describe('rpcCall deadline (G31)', () => {
     expect(copy?.message).not.toMatch(/https?:\/\//);
   });
 
-  // G31 live (QA-u22): a blackholed endpoint fails as a bare "fetch failed" after the connect timeout,
+  // G31 live (tlx-u22): a blackholed endpoint fails as a bare "fetch failed" after the connect timeout,
   // and that read "check your internet connection".
   it('a "fetch failed" that took most of the attempt reads as slow; a fast one stays unreachable', async () => {
     setRpcUrls(['https://rpc-a.example']);

@@ -17,15 +17,17 @@ CLI writes report a dropped value as `Invalid value … (left unchanged)`, exit 
 | `defaultHours` | HOUR_OPTIONS (1–24) | 1 | same | `settings set defaultHours=2` |
 | `preferredCountry` | ISO 3166 alpha-2 (`US`) or `null` | null | same | `settings set preferredCountry=US` |
 | `allowanceTdvpn` | positive tDVPN, ≤ 6 decimals | 50 | same (Device spending limit) | `settings set allowanceTdvpn=25` |
+| `autoDevicePermission` | true / false | true | Settings switch "Set up payments on first connect": Connect signs the device permission, raises a limit below the deposit, installs the service and grants this account its pipe (one admin prompt). Off = manual Wallet route | `settings set autoDevicePermission=false` |
 | `autoConnect` | bool | false | Settings → App | `settings set autoConnect=true` |
-| `autoTopUpDevice` | bool | true | same (Top up this device's SOL automatically) | `settings set autoTopUpDevice=false` |
+| `autoTopUpDevice` | bool | true | same (Keep enough SOL for network fees) | `settings set autoTopUpDevice=false` |
 | `startWithOs` | bool | false | same | `settings set startWithOs=true` |
 | `closeToTray` | bool | true | same | `settings set closeToTray=false` |
 | `notifications` | bool | true | same | `settings set notifications=false` |
 | `thirdPartyChecks` | bool (IP check + speed test) | true | same | `settings set thirdPartyChecks=false` |
 | `theme` | `system` \| `dark` \| `light` | system | same | `settings set theme=dark` |
 | `language` | `en` (v1 English only) | en | — | `settings set language=en` |
-| `rpcUrls` | 1–8 https URLs (http only for 127.0.0.1) | public devnet | Settings → Solana RPC | `rpc set <url…>`, `rpc state` |
+| `speedOrigin`, `speedPin` | a pair: `https://host[:port]` and `sha256//<base64>` (the server's public key pin); both well-formed or both empty, half a pair is refused | empty (public speed hosts) | Settings → Advanced: speed test server | `settings set speedOrigin=https://… speedPin=sha256//…` (both in one command); env `DVPN_SPEED_ORIGIN` / `DVPN_SPEED_PIN` win when set |
+| `rpcUrls` | 1–8 https URLs (http only for 127.0.0.1) | public devnet | Settings → Solana connection (this app) | `rpc set <url…>`, `rpc state` |
 | `favourites` | node addresses (≤ 500) | [] | star on a node | `nodes fav <node>` (toggle) |
 | `poll` | seconds per job, see §3 | §3 | Settings → Background refresh | `poll show / set / reset` |
 
@@ -36,7 +38,7 @@ Read: `daemon settings` (escrow in tDVPN, prepay in MB / min).
 
 | Field | Values | Screen | CLI flag |
 |---|---|---|---|
-| `killSwitch` | off \| on \| persist (Windows: on/persist refused for WG/AWG/OpenVPN, gap #29) | Settings → VPN service | `--kill-switch` |
+| `killSwitch` | off \| on \| persist (all six protocols on Windows: PROTOCOL-MATRIX A11/A12 OK on 7995796c; the old WG/AWG/OpenVPN refusal, gap #29, was fixed in ddv5 and is shown only for an older service, `killSwitchBlocksProtocol`) | Settings → VPN service | `--kill-switch` |
 | `dnsServers` | preset handshake / cloudflare / google / quad9, or 1–4 IPs | same | `--dns` |
 | `allowLan` | bool (the Kill switch page shows the LAN ranges it lets through: `lanRanges`, also CLI `version`) | Kill switch page (+ Settings) | `--allow-lan` |
 | `wholeDevice` | bool: V2Ray/Xray carry every app (TUN) instead of only the proxy | Split tunnelling page | `--whole-device` |
@@ -48,7 +50,7 @@ Read: `daemon settings` (escrow in tDVPN, prepay in MB / min).
 | `prepayBytes` | whole MB | same | `--prepay-mb` |
 | `prepaySeconds` | whole minutes | same | `--prepay-minutes` |
 | `rpcUrl` | https URL | same | `--rpc` (also sets the websocket URL) |
-| `rpcWsUrl` | wss URL | derived from Service RPC | `--rpc-ws` |
+| `rpcWsUrl` | wss URL | derived from "Solana connection for the VPN service" | `--rpc-ws` |
 | `dnsMode` | read-only (daemon's DNS backend) | — | `daemon settings` |
 
 `killSwitch` also has its own page (Kill switch: modes, live state, Restore network). What each

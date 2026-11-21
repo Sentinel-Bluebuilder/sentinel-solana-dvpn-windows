@@ -26,6 +26,7 @@
 //   split-apply                        press Apply there and wait until the service restarted
 //   check=<css checkbox>:on|off        set any checkbox by clicking it
 //   fill=<aria-label>:<text>           type text into the input with that aria-label (e.g. Other device address)
+//   select=<aria-label>:<option value> choose an option in the <select> with that aria-label (e.g. DNS while connected:custom)
 //   nav=<sidebar label>                go to a screen
 //   click=<css selector>|text:<label>  click an element on the screen (button audit)
 //   count=<css selector>:<min>         at least <min> elements match
@@ -87,7 +88,7 @@ const EDGE = path.join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x
 async function edgeIp(dir: string): Promise<string> {
   if (!fs.existsSync(EDGE)) return 'no Edge';
   // Port 0 + DevToolsActivePort: a fixed port let a probe talk to a previous probe's Edge that was
-  // still alive, so each probe reads its own port from its own profile.
+  // still alive (connect-8b, 2026-10-22), so each probe reads its own port from its own profile.
   const profile = fs.mkdtempSync(path.join(dir, 'edge-'));
   let port = 0;
   const { spawn } = await import('node:child_process');
@@ -136,7 +137,7 @@ const heldPorts = new Map<number, import('node:net').Server>();
 
 export async function runScenario(win: BrowserWindow, dir: string, steps: string, shot: (n: string) => Promise<void>): Promise<StepResult[]> {
   const js = (code: string): Promise<unknown> => win.webContents.executeJavaScript(code);
-  const nav = (label: string): Promise<unknown> => js(`[...document.querySelectorAll('nav[aria-label="Main"] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)})?.click()`);
+  const nav = (label: string): Promise<unknown> => js(`[...document.querySelectorAll('nav[data-main-nav] button')].find((x) => x.textContent.trim() === ${JSON.stringify(label)})?.click()`);
   const until = async (code: string, ms: number): Promise<boolean> => {
     for (let t = 0; t < ms / 500; t++) { if (await js(code)) return true; await wait(500); }
     return false;
@@ -147,6 +148,11 @@ export async function runScenario(win: BrowserWindow, dir: string, steps: string
   const direct = process.env.DVPN_UI_DIRECT_IP || await curl();
   // 'none' = no answer at all (the kill switch is blocking): curl() returns '' on failure.
   const want = (w: string): string => (w === 'node' || (w === 'app-direct' && lastCoverage === 'device') ? nodeIp : w === 'none' ? '' : direct);
+  // No DVPN_UI_EXPECT_NODE_IP (proxy-mode runs: the screen never shows the node's exit IP): 'node' means a real
+  // IPv4 that is not the direct one, and the detail says so instead of an empty 'want'.
+  const wantsNode = (w: string): boolean => w === 'node' || (w === 'app-direct' && lastCoverage === 'device');
+  const matches = (ip: string, w: string): boolean => (wantsNode(w) && !nodeIp ? /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) && ip !== direct : ip === want(w));
+  const wantText = (w: string): string => (wantsNode(w) && !nodeIp ? `not ${direct} (node IP not given)` : want(w));
   const out: StepResult[] = [];
   let lastCoverage = '';
 
@@ -220,27 +226,30 @@ export async function runScenario(win: BrowserWindow, dir: string, steps: string
           if (ok) ok = await until(`!/Disconnecting/.test(document.querySelector('main')?.textContent ?? '')`, 60_000);
           await wait(2000);
           break;
-        case 'egress': { const ip = await curl(); ok = ip === want(arg); detail = `system ${ip}, want ${want(arg)}`; break; }
+        case 'egress': { const ip = await curl(); ok = matches(ip, arg); detail = `system ${ip}, want ${wantText(arg)}`; break; }
         case 'egress-socks': {
           await nav('Split tunnelling'); await wait(1200);
           const ep = String(await js(`((document.querySelector('main')?.textContent ?? '[no main layout: the setup screen is showing]').match(/socks5:\\/\\/(127\\.0\\.0\\.1:\\d+)/) ?? [])[1] ?? ''`));
           const ip = ep ? await curl(['--socks5-hostname', ep]) : 'no endpoint on screen';
-          ok = ip === want(arg); detail = `socks ${ep} -> ${ip}`; break;
+          ok = matches(ip, arg); detail = `socks ${ep} -> ${ip}, want ${wantText(arg)}`; break;
         }
         case 'coverage': {
           await nav('Connect');
-          // 'a|b' accepts either label: V2Ray/Xray on dvpnd rc+ run a whole-device TUN, so the honest
+          // 'a|b' accepts either label: V2Ray/Xray on dvpnd ddv7+ run a whole-device TUN, so the honest
           // label is 'device' there, 'proxy-apps' on a proxy-only build (W5 c: the oracle was stale).
           ok = await until(`${JSON.stringify(arg.split('|'))}.includes(document.querySelector('[data-coverage]')?.dataset.coverage ?? '')`, 45_000);
           lastCoverage = String(await js(`document.querySelector('[data-coverage]')?.dataset.coverage ?? ''`));
           detail = String(await js(`(document.querySelector('[data-coverage]')?.dataset.coverage ?? 'none') + ' | ' + (document.querySelector('main')?.textContent ?? '[no main layout: the setup screen is showing]').slice(0, 240)`));
           break;
         }
-        case 'egress-edge': { const ip = await edgeIp(dir); ok = ip === want(arg); detail = `Edge ${ip}, want ${want(arg)}`; break; }
-        case 'egress-wininet': { const ip = await wininet(); ok = ip === want(arg); detail = `WinINET ${ip}, want ${want(arg)}`; break; }
+        case 'egress-edge': { const ip = await edgeIp(dir); ok = matches(ip, arg); detail = `Edge ${ip}, want ${wantText(arg)}`; break; }
+        case 'egress-wininet': { const ip = await wininet(); ok = matches(ip, arg); detail = `WinINET ${ip}, want ${wantText(arg)}`; break; }
         case 'proxy': {
           await nav('Split tunnelling'); await wait(1200);
-          const box = `[...document.querySelectorAll('label')].find((l) => /Windows proxy/i.test(l.textContent))?.querySelector('input')`;
+          // The live switch by its own label. DVPN-WIN KSM10: matching the first <label> with "Windows proxy" hit the
+          // "Whole computer" row (its help text says "with the Windows proxy"), so proxy=on flipped the whole-device
+          // draft and the next Apply in the same run saved it (ksm2/tr-apply/f1-before/ksm10 UI arms).
+          const box = `document.querySelector('input[role="switch"][aria-label^="Send apps through the VPN now"]')`;
           const now = Boolean(await js(`!!(${box})?.checked`));
           if ((arg === 'on') !== now) await js(`(${box})?.click()`);
           await wait(2500);
@@ -261,7 +270,7 @@ export async function runScenario(win: BrowserWindow, dir: string, steps: string
         }
         case 'nav': {
           await nav(arg); await wait(1200);
-          ok = Boolean(await js(`[...document.querySelectorAll('nav[aria-label="Main"] button')].some((x) => x.textContent.trim() === ${JSON.stringify(arg)} && x.getAttribute('aria-current') === 'page')`)) || Boolean(await js(`document.querySelector('main h1')?.textContent.trim() === ${JSON.stringify(arg)}`));
+          ok = Boolean(await js(`[...document.querySelectorAll('nav[data-main-nav] button')].some((x) => x.textContent.trim() === ${JSON.stringify(arg)} && x.getAttribute('aria-current') === 'page')`)) || Boolean(await js(`document.querySelector('main h1')?.textContent.trim() === ${JSON.stringify(arg)}`));
           detail = String(await js(`document.querySelector('main') ? (document.querySelector('main h1')?.textContent ?? '') : 'no main layout: the setup screen is showing (' + (document.body.textContent ?? '').slice(0, 120) + ')'`)); break;
         }
         case 'click': {
@@ -325,6 +334,19 @@ export async function runScenario(win: BrowserWindow, dir: string, steps: string
           const now = String(await js(`${q}?.value ?? ''`));
           ok = ok && now === text;
           detail = ok ? `${label} = ${text.slice(0, 12)}…` : `input "${label}" ${now ? `holds ${now.slice(0, 12)}…` : 'not found'}`; break;
+        }
+        case 'select': {
+          // select=<aria-label>:<option value> (Agent M KSM13: the DNS picker is a <select>). The LAST ':' splits,
+          // so a label may hold one. React owns the value: native setter, then 'change' (bubbles).
+          const at = arg.lastIndexOf(':');
+          const label = arg.slice(0, at);
+          const value = arg.slice(at + 1);
+          const q = `document.querySelector(${JSON.stringify(`select[aria-label="${label}"]`)})`;
+          ok = Boolean(await js(`(() => { const el = ${q}; if (!el || ![...el.options].some((o) => o.value === ${JSON.stringify(value)})) return false; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`));
+          await wait(400);
+          const now = String(await js(`${q}?.value ?? ''`));
+          ok = ok && now === value;
+          detail = ok ? `${label} = ${value}` : `select "${label}" ${now ? `holds ${now}` : 'not found or no such option'}`; break;
         }
         case 'split-route': {
           // split-route=<address or range>:on|off  types it into "Address or range" and presses Add,
@@ -431,8 +453,9 @@ export async function runScenario(win: BrowserWindow, dir: string, steps: string
     } catch (err) {
       detail = `step crashed: ${(err as Error).message}`;
     }
-    const v = await visible().catch(() => []);
-    await shot(`s${String(i).padStart(2, '0')}-${name}`).catch(() => undefined);
+    // K-M4-5: these failures were swallowed; a step's record now says when its screen could not be read.
+    const v = await visible().catch((err: Error) => { console.warn(`[ui-scenario] step ${i} ${name}: reading the screen failed: ${err.message}`); return [`(screen not read: ${err.message})`]; });
+    await shot(`s${String(i).padStart(2, '0')}-${name}`).catch((err: Error) => console.warn(`[ui-scenario] step ${i} ${name}: screenshot failed: ${err.message}`));
     out.push({ step: raw, ok, detail, visible: v });
     fs.writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify(out, null, 2));
   }

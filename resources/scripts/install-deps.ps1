@@ -201,7 +201,9 @@ foreach ($spec in @(
     @{ exe = "$pf\WireGuard\wireguard.exe" },
     @{ exe = "$pf\AmneziaWG\amneziawg.exe" }
   )) {
-  if (Test-Path -LiteralPath $spec.exe) { Ensure-OnMachinePath (Split-Path -Parent $spec.exe) }
+  # Not in -CheckOnly: that is the app's no-admin check, and the writable HKLM open throws for a standard user under
+  # $ErrorActionPreference='Stop', so the check died with no install-deps.json (UI-ENGINE, ddv3-dvw-proof, 10/10).
+  if (-not $CheckOnly -and (Test-Path -LiteralPath $spec.exe)) { Ensure-OnMachinePath (Split-Path -Parent $spec.exe) }
 }
 
 # --- OpenVPN 2.6 + Wintun adapter ---
@@ -225,11 +227,11 @@ if ($ovpn) {
     elseif ($CheckOnly) { Add-Result 'openvpn' $ovpn.version '' 'missing' '' }
     else {
       # dvpnd runs openvpn.exe itself: no OpenVPN GUI, whose logon autostart popped up 'No readable
-      # connection profiles' on every sign-in (test-host 2026-10-24). Core, service and drivers stay.
+      # connection profiles' on every sign-in (ddv-w11x 2026-10-24). Core, service and drivers stay.
       # ADDLOCAL lists what to install. REMOVE alone on a fresh install made the MSI switch to
-      # REMOVE=ALL and install nothing, with exit 0 (installer 29 on test-host, 2026-10-24).
+      # REMOVE=ALL and install nothing, with exit 0 (installer 29 on ddv-w11x, 2026-10-24).
       # The arm64 MSI has no Drivers.Wintun feature: naming it fails the whole install with 1603 /
-      # error 2711. ARM64 uses the DCO adapter instead.
+      # error 2711 (connect-b8 on ddv-w11a, 2026-10-24). ARM64 uses the DCO adapter instead.
       $ovpnFeatures = if ($osArch -eq 'arm64') { 'OpenVPN.Service,OpenVPN,OpenSSL,Drivers,Drivers.TAPWindows6,Drivers.OvpnDco' } else { 'OpenVPN.Service,OpenVPN,OpenSSL,Drivers,Drivers.TAPWindows6,Drivers.Wintun,Drivers.OvpnDco' }
       $code = Install-Msi $ovpn @("ADDLOCAL=$ovpnFeatures")
       if ($code -eq 0 -and (Test-Path -LiteralPath $exe)) { Add-Result 'openvpn' $ovpn.version $ovpn.version 'installed' ''; $ok = $true }
@@ -242,14 +244,17 @@ if ($ovpn) {
     $ad = if ($osArch -eq 'arm64') { @{ key = 'openvpn-dco'; name = 'OpenVPN Data Channel Offload'; hwid = 'ovpn-dco' } }
           else { @{ key = 'openvpn-wintun'; name = 'OpenVPN Wintun'; hwid = 'wintun' } }
     $tapctl = "$pf\OpenVPN\bin\tapctl.exe"
-    if (-not (Test-Path -LiteralPath $tapctl)) {
+    if ($CheckOnly) {
+      # tapctl.exe needs elevation (EACCES for a standard user), so the no-admin check reads the adapter list.
+      # `tapctl create --name` sets the adapter's Name, so the same name matches here.
+      $seen = @(Get-NetAdapter -IncludeHidden -Name $ad.name -ErrorAction SilentlyContinue)
+      if ($seen.Count -gt 0) { Add-Result $ad.key $ad.name $ad.name 'present' '' } else { Add-Result $ad.key $ad.name '' 'missing' '' }
+    } elseif (-not (Test-Path -LiteralPath $tapctl)) {
       Add-Result $ad.key $ad.name '' 'failed' 'tapctl.exe missing'
     } else {
       $list = (Invoke-Tapctl list)
       if ($list -match [regex]::Escape($ad.name)) {
         Add-Result $ad.key $ad.name $ad.name 'present' ''
-      } elseif ($CheckOnly) {
-        Add-Result $ad.key $ad.name '' 'missing' ''
       } else {
         $made = (Invoke-Tapctl create --hwid $ad.hwid --name $ad.name).Trim()
         if ((Invoke-Tapctl list) -match [regex]::Escape($ad.name)) {

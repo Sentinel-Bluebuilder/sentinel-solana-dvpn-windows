@@ -1,6 +1,6 @@
 // ─── Wait for the service link ───
 // Applying a setting restarts the dvpnd service; the app's link comes back within seconds. A connect
-// started in that window waits for it, as the banner promises (test-host 2026-10-22 10:18 UTC:
+// started in that window waits for it, as the banner promises (ddv-win-a 2026-10-22 10:18 UTC:
 // Apply then Connect failed at once with "The VPN service is not running").
 
 /** How long a connect waits for the service link. */

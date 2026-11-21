@@ -1,6 +1,6 @@
 # Architecture — Devnet dVPN
 
-Planned structure. Feature IDs (F*.*) refer to [`FEATURE-PLAN.md`](FEATURE-PLAN.md).
+Planned structure. Feature IDs (F*.*) refer to `FEATURE-PLAN.md`.
 
 ## Processes and trust
 
@@ -68,7 +68,7 @@ src/
                      Settings, Diagnostics, Node test), components, theme tokens
 ```
 
-Port sources for each module: [`REUSE-MAP.md`](REUSE-MAP.md).
+Port sources for each module: `REUSE-MAP.md`.
 
 ## IPC tiers (M5.2 #1)
 

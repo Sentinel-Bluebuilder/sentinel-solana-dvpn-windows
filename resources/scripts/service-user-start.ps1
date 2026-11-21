@@ -7,6 +7,8 @@
 # installer and by setup-daemon.ps1. Idempotent. ASCII only.
 param([string]$Service = 'sentinel-dvpnd$c0')
 $ErrorActionPreference = 'Stop'
+# rc9-c D5: this grants interactive users the start right, so only on this app's service (the grant-pipe.ps1 check).
+if ($Service -notmatch '^sentinel-dvpnd\$([a-z0-9]+)$') { throw "unexpected service name $Service" }
 if (-not (Get-Service -Name $Service -ErrorAction SilentlyContinue)) { Write-Output "service-user-start: no $Service service"; exit 0 }
 $sddl = ((& sc.exe sdshow $Service) | Where-Object { $_ -match '^D:' } | Select-Object -First 1)
 if (-not $sddl) { throw "could not read the $Service security descriptor" }

@@ -46,7 +46,7 @@ describe('CLI covers every setting', () => {
 
 describe('Settings screen covers every setting (CLI = app)', () => {
   const ui = ['Settings', 'KillSwitch', 'SplitTunnel'].map((p) => fs.readFileSync(`src/renderer/src/screens/${p}.tsx`, 'utf8')).join('\n');
-  const UI_ELSEWHERE: Record<string, string> = { favourites: 'node list star', language: 'English only in v1', poll: 'PollSettings' };
+  const UI_ELSEWHERE: Record<string, string> = { favourites: 'node list star', language: 'LanguageSelector (sidebar, welcome, Settings)', poll: 'PollSettings' };
   it.each(Object.keys(DEFAULT_SETTINGS))('app setting %s has a control', (k) => {
     if (UI_ELSEWHERE[k]) return expect(UI_ELSEWHERE[k] === 'PollSettings' ? ui : 'ok').toContain(UI_ELSEWHERE[k] === 'PollSettings' ? '<PollSettings' : 'ok');
     expect(ui).toMatch(new RegExp(`settings\.${k}\b|\{ ${k}:`));
@@ -59,6 +59,7 @@ describe('Settings screen covers every setting (CLI = app)', () => {
     expect(page).toMatch(/setSplit\(\{ mode:/);
     expect(page).toMatch(/setSplit\(\{ apps:/);
     expect(page).toMatch(/setSplit\(\{ routes:/);
-    expect(page).toMatch(/validateSplit\(split\)/); // same rules as dvpnd before Apply
+    // same rules as dvpnd before Apply, for this OS (the renderer has no process.platform: DVPN-LINUX KSM10)
+    expect(page).toMatch(/validateSplit\(split, rendererPlatform\(\)\)/);
   });
 });

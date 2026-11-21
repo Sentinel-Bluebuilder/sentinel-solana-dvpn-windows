@@ -10,6 +10,8 @@ param(
   [string]$AppDataDir = (Join-Path $env:APPDATA 'Devnet dVPN')
 )
 $ErrorActionPreference = 'Continue'
+# Q0576: a PowerShell 7 parent leaks its module path into 5.1 and breaks cmdlet autoload.
+$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
 $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 
 # --- 1. system proxy ---
@@ -21,7 +23,8 @@ if (Test-Path -LiteralPath $backup) {
     $helper = Join-Path $PSScriptRoot 'sysproxy.ps1'
     if (Test-Path -LiteralPath $helper) {
       $now = (& $helper -Mode query | Select-Object -Last 1) | ConvertFrom-Json
-      if ($now.server -eq $saved.ours -and ($now.flags -band 2)) {
+      # ours = our PAC URL (Q0537, flag 4) or, from older versions, our manual SOCKS entry (flag 2).
+      if (($now.pac -eq $saved.ours -and ($now.flags -band 4)) -or ($now.server -eq $saved.ours -and ($now.flags -band 2))) {
         $st = if ($saved.state) { $saved.state } else { [ordered]@{ flags = $(if ([int]$saved.proxyEnable) { 3 } else { 1 }); server = [string]$saved.proxyServer; bypass = ''; pac = '' } }
         $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($st | ConvertTo-Json -Compress)))
         & $helper -Mode set -Json $b64 | Out-Null
@@ -63,7 +66,7 @@ if (Get-Service -Name 'dvpnd' -ErrorAction SilentlyContinue) {
   & sc.exe delete dvpnd | Write-Output
 }
 # A kept "Always" setting re-armed the old block at the first service start after a reinstall,
-# with no session and no way in for the user (gap #84, test-host armed84-16: 22 filters, no
+# with no session and no way in for the user (gap #84, ddv-win-2 armed84-16: 22 filters, no
 # internet). The config folder is kept by design, so step the setting down to "on": the daemon
 # then releases the old row at its first start (cf4c 45574d5) and the user turns "On" again.
 $home0 = Join-Path $env:ProgramData 'sentinel-dvpn\c0'
@@ -101,11 +104,30 @@ foreach ($name in 'hysteria2', 'v2ray', 'xray', 'pipe-bridge') {
     Write-Output "stopped $name pid $($_.Id)"
   }
 }
+# CODE-AUDIT U-27: an OpenVPN dvpnd started (its command line names dvpnd's home); a user's own is left alone.
+Get-CimInstance Win32_Process -Filter "Name='openvpn.exe'" -ErrorAction SilentlyContinue | Where-Object {
+  ("$($_.CommandLine)" -like '*\sentinel-dvpn\*') -or ("$($_.CommandLine)" -like '*\dvpnd\*')
+} | ForEach-Object {
+  Stop-Process -Id $_.ProcessId -Force -ErrorAction Continue
+  Write-Output "stopped openvpn pid $($_.ProcessId)"
+}
 
 # --- 4. firewall rules the Hysteria2 client adds for itself ("sing-tun (<path>)", inbound allow) ---
-# Only rules naming the app's own folder (UPSTREAM-GAPS the Windows app).
+# Only rules naming the app's own folder (UPSTREAM-GAPS #31).
 Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'sing-tun (*\Devnet dVPN\*' } | ForEach-Object {
   Remove-NetFirewallRule -Name $_.Name -ErrorAction Continue
   Write-Output "firewall rule removed: $($_.DisplayName)"
+}
+
+# --- 5. pipe access the app's setup granted (Q0488): the allow list in the service home (the home itself
+# is kept for the device key), and the per-user tasks an older build (cd7e9d6) registered ---
+$allow = Join-Path $home0 'pipe-allow.txt'
+if (Test-Path -LiteralPath $allow) {
+  Remove-Item -LiteralPath $allow -Force -ErrorAction Continue
+  Write-Output 'pipe allow list removed'
+}
+Get-ScheduledTask -TaskName 'devnet-dvpn-pipe-grant-*' -ErrorAction SilentlyContinue | ForEach-Object {
+  Unregister-ScheduledTask -TaskName $_.TaskName -Confirm:$false -ErrorAction Continue
+  Write-Output "task removed: $($_.TaskName)"
 }
 exit 0

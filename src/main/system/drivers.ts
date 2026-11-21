@@ -10,6 +10,7 @@ import { getHost } from '../host';
 import { log } from '../logger';
 import { runElevated } from './elevate';
 import { resourcesDir, scriptPath } from '../daemon/manager';
+import { tr } from '../../shared/i18n';
 
 export type DriverStatus = 'present' | 'installed' | 'upgraded' | 'missing' | 'failed' | 'incompatible';
 export interface DriverRow { name: string; wanted: string; found: string; status: DriverStatus; detail: string }
@@ -102,17 +103,18 @@ export async function driversStatus(): Promise<DriversView> {
 }
 
 /** Install or repair every missing driver (one administrator prompt). */
-export async function repairDrivers(): Promise<{ ok: boolean; error?: string; view: DriversView }> {
-  if (process.platform !== 'win32') return { ok: false, error: 'Drivers are installed by the Windows app only.', view: await driversStatus() };
+/** `_onLine`: progress lines (shared signature; macOS streams Homebrew output, Windows has none). */
+export async function repairDrivers(_onLine?: (line: string) => void): Promise<{ ok: boolean; error?: string; view: DriversView }> {
+  if (process.platform !== 'win32') return { ok: false, error: tr('Drivers are installed by the Windows app only.'), view: await driversStatus() };
   const r = await runElevated(scriptPath('install-deps.ps1'), { DepsDir: depsDir() }, 600_000);
   const view = await driversStatus();
   if (r.status === 'ok') return { ok: true, view };
-  return { ok: false, error: r.status === 'cancelled' ? r.detail : `Some drivers could not be installed: ${r.detail}`, view };
+  return { ok: false, error: r.status === 'cancelled' ? r.detail : tr('Some drivers could not be installed: {detail}', { detail: r.detail }), view };
 }
 
 /** Re-create only dvpnd's OpenVPN adapter (one admin step), then check it is there. */
 export async function recreateOpenvpnAdapter(): Promise<{ ok: boolean; detail: string }> {
-  if (process.platform !== 'win32') return { ok: false, detail: 'Windows only' };
+  if (process.platform !== 'win32') return { ok: false, detail: tr('Windows only') };
   log.info('openvpn adapter missing; re-creating it');
   // 180 s: the first Wintun driver install on a fresh PC ran past 60 s (VM ui-win-2 2026-10-22).
   const r = await runElevated(scriptPath('openvpn-adapter.ps1'), {}, 180_000);
@@ -136,7 +138,7 @@ export function driverLines(r: DriverReport): string[] {
  * native build per CPU, so process.arch is the machine's CPU. Exported for tests.
  */
 export function openvpnAdapterName(arch: string = process.arch): string {
-  return arch === 'arm64' ? 'OpenVPN Data Channel Offload' : 'OpenVPN Wintun';
+  return arch === 'arm64' ? tr('OpenVPN Data Channel Offload') : tr('OpenVPN Wintun');
 }
 
 /** true when tapctl's list does not show that adapter. Exported for tests. */
@@ -159,4 +161,9 @@ export function openvpnAdapterMissing(): Promise<boolean> {
       resolve(adapterMissingIn(String(stdout), openvpnAdapterName()));
     });
   });
+}
+
+/** Why AmneziaWG cannot connect on this computer, checked before paying. Windows bundles it: never blocked. */
+export async function amneziawgBlocker(): Promise<string | null> {
+  return null;
 }

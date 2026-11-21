@@ -1,5 +1,5 @@
 // ─── `status` never waits out the network (Q0372) ───
-// QA (Linux, wg, kill switch on) and TWD (Windows): during a tunnel cut every status call took
+// FLX2 (Linux, wg, kill switch on) and TWD (Windows): during a tunnel cut every status call took
 // 71-90 s, each RPC/IP read waiting for its own timeout one after another. With every network read
 // hanging, status must answer within the budget and show the unread parts as unknown.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -24,10 +24,13 @@ vi.mock('../../src/main/services/wallet', () => ({ refreshWallet: () => never() 
 vi.mock('../../src/main/services/connection', () => ({
   adoptRunningSession: () => (st.adoptHangs ? never() : Promise.resolve()),
   sessionStateUnknown: () => st.unknown,
+  blockedNoSessionView: () => ({ phase: 'error', title: 'Internet blocked', detail: '', restoreNetwork: true }),
 }));
 vi.mock('../../src/main/daemon/manager', () => ({ daemonInfo: () => ({ reachable: true, version: 'test', device: 'Dev1' }) }));
 vi.mock('../../src/main/system/proxy', () => ({ clearSystemProxy: vi.fn(), systemProxyActive: () => false }));
 vi.mock('../../src/main/system/tunnels', () => ({ leftoverTunnels: () => never() }));
+// blockedAdvice reads the kill-switch mode (Q0426, the Linux app): 'on' = the disconnect advice.
+vi.mock('../../src/main/daemon/settings', () => ({ getDaemonSettings: () => ({ readable: true, settings: { killSwitch: 'on' } }) }));
 vi.mock('../../src/main/services/settlement', () => ({ readSettlements: () => never(), settlesOnEnd: (r: string) => !/switching servers/i.test(r) }));
 vi.mock('../../src/core/quality/reachability', () => ({ internetReachable: (...a: unknown[]) => st.probe(...a) }));
 vi.mock('../../src/core/chain/rpc', () => ({ getRpcUrls: () => ['https://rpc.invalid'] }));
@@ -56,7 +59,7 @@ describe('status during a dead network (Q0372)', () => {
     let printed = '';
     let settled = false;
     const done = statusCmd({ _: [], flags: {} } as never, { print: (t: string) => { printed = t; } } as never).then(() => { settled = true; });
-    // Q0366 pass 2 (QA fedora, KS blocking, no session): 5-8 s; DIR's gate is under 3 s. The wallet,
+    // Q0366 pass 2 (FLX2 fedora, KS blocking, no session): 5-8 s; DIR's gate is under 3 s. The wallet,
     // leftover and internet reads run together once dvpnd said "no session".
     await vi.advanceTimersByTimeAsync(2999);
     expect(settled).toBe(true);
@@ -73,13 +76,16 @@ describe('status during a dead network (Q0372)', () => {
     const calls: unknown[][] = [];
     st.probe = (...a) => { calls.push(a); return new Promise((r) => setTimeout(() => r(false), (a[1] as { timeoutMs: number }).timeoutMs)); };
     let printed = '';
+    let data: { conn?: { restoreNetwork?: boolean } } = {};
     let settled = false;
-    const done = statusCmd({ _: [], flags: {} } as never, { print: (t: string) => { printed = t; } } as never).then(() => { settled = true; });
+    const done = statusCmd({ _: [], flags: {} } as never, { print: (t: string, d: typeof data) => { printed = t; data = d; } } as never).then(() => { settled = true; });
     await vi.advanceTimersByTimeAsync(2999);
     expect(settled).toBe(true);
     await done;
     expect(calls[0]?.[1]).toEqual({ timeoutMs: STATUS_NET_BUDGET_MS });
     expect(printed).toContain('Internet blocked');
+    // CODE-AUDIT M13 (A): --json `conn` is the blocked view too, not "Not connected" with nothing to press.
+    expect(data.conn).toMatchObject({ title: 'Internet blocked', restoreNetwork: true });
   });
 
   // Q0373: dvpnd running but its session list did not answer (redialing): never "Not connected".

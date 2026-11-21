@@ -29,12 +29,17 @@ try {
     }
     $removed += $svc
   }
-  # Protocol processes a dead dvpnd left behind (UPSTREAM-GAPS the Linux app): they keep the tunnel and
+  # Protocol processes a dead dvpnd left behind (UPSTREAM-GAPS #32): they keep the tunnel and
   # the route. hysteria2 / v2ray / xray only from the app's own folder; openvpn only when its
   # command line points at dvpnd's config (a user's own OpenVPN is never touched).
+  # CODE-AUDIT U-27: dvpnd's home is %ProgramData%\sentinel-dvpn\<instance> since cb33 (\dvpnd\ before it).
+  function Test-OurOpenvpn($p) {
+    $cl = "$($p.CommandLine)"
+    ($p.Name -eq 'openvpn.exe') -and (($cl -like '*\sentinel-dvpn\*') -or ($cl -like '*\dvpnd\*'))
+  }
   $procs = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     (($_.Name -match '^(hysteria2|v2ray|xray)\.exe$') -and ("$($_.ExecutablePath)" -like '*\Devnet dVPN\*')) -or
-    (($_.Name -eq 'openvpn.exe') -and ("$($_.CommandLine)" -like '*\dvpnd\*'))
+    (Test-OurOpenvpn $_)
   })
   foreach ($p in $procs) {
     Stop-Process -Id $p.ProcessId -Force -ErrorAction Continue
@@ -42,7 +47,7 @@ try {
   }
   if ($procs.Count) { Start-Sleep -Seconds 3 }
   $left = @(Get-Service | Where-Object { $_.Name -like 'WireGuardTunnel$dvpn-*' -or $_.Name -like 'AmneziaWGTunnel$dvpn-*' })
-  $left += @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { ($_.Name -match '^(hysteria2|v2ray|xray)\.exe$') -and ("$($_.ExecutablePath)" -like '*\Devnet dVPN\*') } | ForEach-Object { [pscustomobject]@{ Name = "$($_.Name):$($_.ProcessId)" } })
+  $left += @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { (($_.Name -match '^(hysteria2|v2ray|xray)\.exe$') -and ("$($_.ExecutablePath)" -like '*\Devnet dVPN\*')) -or (Test-OurOpenvpn $_) } | ForEach-Object { [pscustomobject]@{ Name = "$($_.Name):$($_.ProcessId)" } })
   if ($left.Count -gt 0) { Write-Result 'error' ("still running: " + (($left | ForEach-Object { $_.Name }) -join ', ')); exit 1 }
   Write-Result 'ok' ($(if ($removed.Count) { 'removed: ' + ($removed -join ', ') } else { 'none left' }))
 } catch {

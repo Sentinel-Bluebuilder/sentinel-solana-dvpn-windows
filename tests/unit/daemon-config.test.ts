@@ -24,7 +24,7 @@ const SETTINGS: DaemonSettings = {
 describe('daemon config', () => {
   it('a KS-only set persists when the stored RPC is an http gate; writers skip the https rule (Q0478)', () => {
     const gate: DaemonSettings = { ...SETTINGS, killSwitch: 'persist', rpcUrl: 'http://127.0.0.1:8899', rpcWsUrl: 'ws://127.0.0.1:8900' };
-    // the writers carry the http-gate RPC through without re-imposing https (Q0478 / QA-M7 / Q0468)
+    // the writers carry the http-gate RPC through without re-imposing https (Q0478 / FMC-M7 / Q0468)
     expect(() => renderConfigs(ROOT, CLIENT, gate)).not.toThrow();
     expect(() => renderConfig(CLIENT, gate)).not.toThrow();
     const { root, client } = renderConfigs(ROOT, CLIENT, gate);
@@ -116,7 +116,7 @@ describe('daemon config', () => {
   });
 });
 
-// ─── V2Ray/Xray whole-device mode (dvpnd rc+): `tun` in client/<svc>/config.toml ───
+// ─── V2Ray/Xray whole-device mode (dvpnd ddv8+): `tun` in client/<svc>/config.toml ───
 import { parseWholeDevice, renderServiceConfig } from '../../src/core/daemon/config';
 import { boolFlag } from '../../src/core/daemon/flags';
 describe('whole-device setting', () => {

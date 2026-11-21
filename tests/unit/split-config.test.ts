@@ -1,4 +1,4 @@
-// ─── [split] in the dvpnd client config: render, read back, validate (dvpnd rc+) ───
+// ─── [split] in the dvpnd client config: render, read back, validate (dvpnd ddv11+) ───
 import { describe, expect, it } from 'vitest';
 import { parseSettings, renderConfigs, validateSplit, type DaemonSettings } from '../../src/core/daemon/config';
 
@@ -34,7 +34,7 @@ describe('split config', () => {
   it('refuses what dvpnd would refuse', () => {
     const ok = { mode: 'include' as const, apps: ['C:\\a\\b.exe'], routes: [] };
     expect(() => validateSplit(ok)).not.toThrow();
-    expect(() => validateSplit({ ...ok, apps: ['/usr/bin/firefox'] })).not.toThrow();
+    expect(() => validateSplit({ ...ok, apps: ['/usr/bin/firefox'] }, 'linux')).not.toThrow(); // the darwin bundle rule is mac-split's (platform test)
     expect(() => validateSplit({ ...ok, mode: 'all' as never })).toThrow(/mode/);
     expect(() => validateSplit({ ...ok, apps: ['firefox.exe'] })).toThrow(/full path/);
     expect(() => validateSplit({ ...ok, apps: ['C:\\a\\b.txt'] })).toThrow(/\.exe/);

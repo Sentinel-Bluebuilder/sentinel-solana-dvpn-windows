@@ -8,10 +8,10 @@ import { initRuntime, APP_DIR_NAME } from './runtime';
 import { safeStorageKeyStore } from './wallet/electron-keystore';
 import { attachGlobalHandlers, log } from './logger';
 import { registerIpc } from './ipc';
-import { startDaemonLink, stopDaemonLink, onDaemonChange } from './daemon/manager';
+import { startDaemonLink, stopDaemonLink, onDaemonChange, serviceStaleNames, daemonInfo, setLinkWatching } from './daemon/manager';
 import { startScheduler, stopScheduler, setHidden } from './scheduler';
-import { adoptRunningSession, checkLeftoverBlock, disconnect } from './services/connection';
-import { snapshot } from './app-state';
+import { adoptRunningSession, checkLeftoverBlock, disconnect, showBlockWhileServiceStarts } from './services/connection';
+import { patch, snapshot } from './app-state';
 import './ks-title-wire';
 import { restoreProxyOnStartup, clearSystemProxy } from './system/proxy';
 import { getSettings, onSettingsChanged } from './system/settings';
@@ -19,15 +19,25 @@ import { maybeAutoConnect } from './services/auto-connect';
 import { createTray, updateTray, isQuitting, markQuitting, trayActive, destroyTray } from './system/tray';
 import { notifyIfHidden } from './system/notify';
 import { EVENTS } from '../shared/ipc';
+import { BLOCKED_AT_START_NOTICE, LOGIN_ITEM_TICK_MS, SERVICE_START_GRACE_MS, loginItemWanted } from '../shared/kill-switch-start';
+import { getDaemonSettings } from './daemon/settings';
+import { serviceInTransition } from './services/service-transition';
 import { cliKeyStore } from '../cli/keystore';
-import { runUiSmoke, prepareUiSmoke } from './dev/ui-smoke';
+import { devHooksArmed, uiSmokeEnv } from './dev/hooks';
+
+declare const __DVPN_DEV_HOOKS__: string;
+import { startLanguage } from './language';
 
 // Test-only overrides (same names as the CLI): a scratch data dir and a read-only
 // key file let e2e runs drive the real app without touching the user's profile.
 const TEST_DATA_DIR = process.env.DVPN_DATA_DIR || '';
 const TEST_KEYFILE = process.env.DVPN_KEYFILE || '';
 
-if (process.env.DVPN_UI_SMOKE) prepareUiSmoke();
+// K-M4-5: the UI test hooks load only in a build made with them (dev/hooks.ts). The literal test lets a release
+// bundle drop the import and its chunk; the switches are appended before 'ready' (the import resolves first).
+const uiSmoke = __DVPN_DEV_HOOKS__ && devHooksArmed(app.isPackaged) && process.env.DVPN_UI_SMOKE
+  ? import('./dev/ui-smoke').then((m) => { m.prepareUiSmoke(); return m; })
+  : null;
 app.setName(APP_DIR_NAME);
 app.setPath('userData', TEST_DATA_DIR || path.join(app.getPath('appData'), APP_DIR_NAME));
 
@@ -57,6 +67,9 @@ function createWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     title: 'Devnet dVPN',
+    // Packaged: Windows takes the exe icon (electron-builder win.icon = build/icon.ico). From source
+    // there is no exe icon, so name the app mark here; without it the taskbar showed Electron's.
+    ...(app.isPackaged ? {} : { icon: path.join(app.getAppPath(), 'build', 'icon.png') }),
     backgroundColor: '#060608',
     show: false,
     autoHideMenuBar: true,
@@ -97,14 +110,22 @@ function createWindow(): BrowserWindow {
     e.preventDefault();
     w.hide();
   });
-  w.on('hide', () => setHidden(true));
-  w.on('show', () => setHidden(false));
+  // Row 121: while the window can be seen the service link retries every second; hidden or minimised it backs off.
+  const watchLink = (): void => setLinkWatching(!w.isDestroyed() && w.isVisible() && !w.isMinimized());
+  w.on('hide', () => { setHidden(true); watchLink(); });
+  w.on('show', () => { setHidden(false); watchLink(); });
+  w.on('minimize', watchLink);
+  w.on('restore', watchLink);
+  w.once('ready-to-show', watchLink);
   w.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) void shell.openExternal(url);
     return { action: 'deny' };
   });
   w.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('http://localhost') && !url.startsWith('file://')) e.preventDefault();
+    // L-26: only the app's own page. The old prefix test let 'http://localhost.example.com' through, and
+    // allowed localhost in the installed app, which never loads from it.
+    const dev = process.env.ELECTRON_RENDERER_URL;
+    if (!url.startsWith('file://') && !(dev && url.startsWith(dev.endsWith('/') ? dev : `${dev}/`))) e.preventDefault();
   });
   if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(process.env.ELECTRON_RENDERER_URL);
   else void w.loadFile(path.join(__dirname, '../renderer/index.html'));
@@ -131,20 +152,81 @@ app.whenReady().then(async () => {
     },
   });
   log.info('app start', { version: app.getVersion(), packaged: app.isPackaged });
+  // B5: main writes sentences too; the screens follow snapshot().language.
+  await startLanguage(app.getPreferredSystemLanguages(), () => { patch({}); updateTray(); })
+    .catch((err) => log.error('language start failed; English', err));
   // No remote content, no permission prompts.
   session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   await restoreProxyOnStartup().catch((err) => log.error('proxy restore on start failed', err));
   registerIpc();
   win = createWindow();
-  if (process.env.DVPN_UI_SMOKE) runUiSmoke(win, process.env.DVPN_UI_SMOKE);
+  if (uiSmoke) {
+    const smokeWin = win;
+    uiSmoke.then((m) => m.runUiSmoke(smokeWin, uiSmokeEnv(app.isPackaged))).catch((err) => log.error('ui smoke failed to start', err));
+  }
   createTray(() => win);
   if (!TEST_DATA_DIR) {
-    app.setLoginItemSettings({ openAtLogin: getSettings().startWithOs, args: ['--hidden'] });
-    onSettingsChanged((st) => app.setLoginItemSettings({ openAtLogin: st.startWithOs, args: ['--hidden'] }));
+    // Owner 2026-11-13: while the kill switch is on the app starts at log-in, so a block kept across a restart is explained.
+    // DVPN-WIN KSM7 UI arm (hunt t-ksrun): with the app running, a kill switch turned on by the CLI never wrote the
+    // item; the one daemon-change event can come before the new setting is readable. So it is also checked on a
+    // LOGIN_ITEM_TICK_MS tick, and the OS is asked only when the decision changes (one log line each time).
+    let loginItemLast: string | null = null;
+    const loginItem = (why: string): void => {
+      const startWithOs = getSettings().startWithOs;
+      const daemonSettings = getDaemonSettings();
+      if (!daemonSettings.readable && loginItemLast !== null) return; // a moment unreadable (mid-Apply) is not 'off'
+      const killSwitch = daemonSettings.settings.killSwitch;
+      const openAtLogin = loginItemWanted(startWithOs, killSwitch);
+      const key = `${openAtLogin}|${killSwitch}|${startWithOs}|${daemonSettings.readable}`;
+      if (key === loginItemLast) return;
+      try { app.setLoginItemSettings({ openAtLogin, args: ['--hidden'] }); }
+      catch (err) { log.warn('could not set the log-in item', { err: (err as Error).message }); return; }
+      loginItemLast = key;
+      log.info('log-in item', { why, openAtLogin, killSwitch, startWithOs, readable: daemonSettings.readable, osSays: app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin });
+    };
+    loginItem('start');
+    onSettingsChanged(() => loginItem('settings'));
+    onDaemonChange(() => loginItem('daemon change')); // the kill switch changes by an Apply, which restarts the service
+    setInterval(() => loginItem('tick'), LOGIN_ITEM_TICK_MS).unref();
   }
   startDaemonLink();
   // After the daemon link settles: adopt its session, else look for a leftover block (F14.3). A session first seen here was not started by this app process (W5 f: a CLI session adopted on a daemon-change event was auto-settled 15 s after the CLI disconnect, against the CLI's keep-open rule).
-  onDaemonChange(() => { void adoptRunningSession({ applyProxy: true, startedElsewhere: true }).then(() => checkLeftoverBlock()); });
+  // Owner 2026-11-13: a block found while the app starts (a restart while connected) brings the window up and says why.
+  let blockAtStartChecked = false;
+  // Q0575: the service may start minutes after log-in (Windows delayed-auto); a block it keeps is shown meanwhile.
+  setTimeout(() => {
+    void showBlockWhileServiceStarts().then((shown) => {
+      if (!shown || blockAtStartChecked) return;
+      notifyIfHidden({ kind: 'warn', message: BLOCKED_AT_START_NOTICE() }, win);
+      if (win && !win.isDestroyed() && !win.isVisible()) win.show();
+    }).catch((err: unknown) => log.warn('the block check while the service starts failed', { err: (err as Error).message }));
+  }, SERVICE_START_GRACE_MS).unref();
+  onDaemonChange(() => {
+    void adoptRunningSession({ applyProxy: true, startedElsewhere: true }).then(() => checkLeftoverBlock()).then((blocked) => {
+      // Only the first settled answer within 3 min of start counts (a restart in progress answers 'no' for now).
+      if (blockAtStartChecked || !daemonInfo().reachable || serviceInTransition() || process.uptime() > 180) return;
+      blockAtStartChecked = true;
+      if (!blocked) return;
+      log.info('the kill switch blocks the internet at app start; showing the window');
+      notifyIfHidden({ kind: 'warn', message: BLOCKED_AT_START_NOTICE() }, win);
+      if (win && !win.isDestroyed() && !win.isVisible()) win.show();
+    }).catch((err: unknown) => log.warn('the block check at start failed', { err: (err as Error).message }));
+  });
+  // Agent M (Mac): an app update that left the service on its old copies says so on Connect, once per start and
+  // again each time the service comes back (after Update the VPN service it is current and the banner goes).
+  const checkServiceCopies = (): void => {
+    try {
+      const stale = serviceStaleNames();
+      const was = snapshot().serviceOutdated ?? [];
+      if (stale.join('|') !== was.join('|')) {
+        if (stale.length) log.info('the VPN service runs older copies than this app', { stale });
+        patch({ serviceOutdated: stale });
+      }
+    } catch (err) { log.warn('could not compare the service copies with this app', { err: (err as Error).message }); }
+  };
+  checkServiceCopies();
+  let lastReachable = false;
+  onDaemonChange(() => { const up = daemonInfo().reachable; if (up && !lastReachable) checkServiceCopies(); lastReachable = up; });
   startScheduler(); // its first tick reads the wallet; a second read here doubled every startup call (T5)
   if (!process.env.DVPN_UI_SMOKE) void maybeAutoConnect();
 }).catch((err) => log.error('startup failed', err));
@@ -169,6 +251,12 @@ app.on('before-quit', (e) => {
     app.quit();
   });
 });
+
+// Agent M (Mac, rc.2 B pid 3601): a plain SIGTERM (pkill, scripts, launchd/systemd teardown) left the app running,
+// with no cleanup. Electron does not map it to a quit; this runs the same before-quit cleanup (10 s cap).
+for (const sig of ['SIGTERM', 'SIGHUP'] as const) {
+  process.on(sig, () => { log.info('quit on signal', { sig }); app.quit(); });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

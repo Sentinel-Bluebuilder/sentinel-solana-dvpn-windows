@@ -6,6 +6,8 @@
 import dgram from 'node:dgram';
 import net from 'node:net';
 import crypto from 'node:crypto';
+import { log } from '../logger';
+import { tr } from '../../shared/i18n';
 
 export interface DnsProbe {
   server: string;
@@ -42,7 +44,15 @@ const udpIo: ProbeIo = {
   send(server, query, timeoutMs) {
     return new Promise((resolve) => {
       const sock = dgram.createSocket(net.isIPv6(server) ? 'udp6' : 'udp4');
-      const done = (v: Buffer | null): void => { clearTimeout(t); sock.close(); resolve(v); };
+      // CODE-AUDIT U-18: a second datagram or an error after the reply must not close the socket twice.
+      let settled = false;
+      const done = (v: Buffer | null): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(t);
+        try { sock.close(); } catch (err) { log.warn('dns probe: socket close failed', { err: (err as Error).message }); }
+        resolve(v);
+      };
       const t = setTimeout(() => done(null), timeoutMs);
       sock.on('message', (msg) => done(msg));
       sock.on('error', () => done(null));
@@ -73,5 +83,5 @@ export async function dnsDoctorRow(servers: string[], io?: ProbeIo): Promise<{ n
   const problem = dnsProbeProblem(rows);
   if (problem) return { name: 'dns_servers', ok: false, level: 'warn', detail: problem };
   const dead = rows.filter((r) => !r.ok).map((r) => r.server);
-  return { name: 'dns_servers', ok: true, level: dead.length ? 'warn' : 'ok', detail: dead.length ? `Answering, except ${dead.join(', ')}.` : `All answer (${rows.map((r) => `${r.server} ${r.ms} ms`).join(', ')}).` };
+  return { name: 'dns_servers', ok: true, level: dead.length ? 'warn' : 'ok', detail: dead.length ? tr('Answering, except {join}.', { join: dead.join(', ') }) : tr('All answer ({join}).', { join: rows.map((r) => `${r.server} ${r.ms} ms`).join(', ') }) };
 }

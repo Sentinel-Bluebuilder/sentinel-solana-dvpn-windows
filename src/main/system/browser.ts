@@ -8,9 +8,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { storePath } from '../store';
 import { log } from '../logger';
+import { ShownError } from '../../shared/i18n';
+import { webUrl } from '../../shared/web-url';
 
 export type BrowserName = 'edge' | 'chrome';
 export const BROWSERS: BrowserName[] = ['edge', 'chrome'];
+/** What the CLI calls each browser (shared info-cmd). */
+export const BROWSER_TITLES: Record<BrowserName, string> = { edge: 'Microsoft Edge', chrome: 'Google Chrome' };
 
 /** Where each browser is normally installed on Windows (machine-wide, then per-user). */
 export function browserCandidates(name: BrowserName, env: NodeJS.ProcessEnv = process.env): string[] {
@@ -26,6 +30,9 @@ export function findBrowser(name: BrowserName, exists: (p: string) => boolean = 
 /** Command-line flags. Exported for tests: the DNS rule is what keeps lookups off this computer. */
 export function browserArgs(endpoint: string, profileDir: string, url: string): string[] {
   if (!/^127\.0\.0\.1:\d{2,5}$/.test(endpoint)) throw new Error(`"${endpoint}" is not a local SOCKS endpoint.`);
+  // W31-16 (rc9-c2): the page is a web address only, after Chromium's end-of-switches marker, so it can never be a flag.
+  const page = webUrl(url);
+  if (!page) throw new Error('the page to open is not an http(s) web address'); // copy:internal (the CLI refuses first)
   return [
     `--proxy-server=socks5://${endpoint}`,
     // Chrome resolves names itself unless every host is mapped away; with this rule the SOCKS5
@@ -35,8 +42,11 @@ export function browserArgs(endpoint: string, profileDir: string, url: string): 
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-quic', // QUIC is UDP; a SOCKS5 proxy here carries TCP only.
+    // CODE-AUDIT U-17: WebRTC (STUN) is UDP too and would show any page the real public IP.
+    '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
     '--new-window',
-    url,
+    '--',
+    page,
   ];
 }
 
@@ -56,5 +66,7 @@ export function launchBrowser(endpoint: string, want?: BrowserName, url = 'https
     log.info('browser launched through the VPN', { browser: name, endpoint });
     return { browser: name, exe, endpoint, profileDir };
   }
-  throw new Error(want ? `${want === 'edge' ? 'Microsoft Edge' : 'Google Chrome'} is not installed on this computer.` : 'Neither Microsoft Edge nor Google Chrome is installed on this computer.');
+  throw want
+    ? new ShownError('{browser} is not installed on this computer.', { browser: BROWSER_TITLES[want] })
+    : new ShownError('Neither Microsoft Edge nor Google Chrome is installed on this computer.');
 }

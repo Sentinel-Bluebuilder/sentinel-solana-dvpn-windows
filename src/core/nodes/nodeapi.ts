@@ -37,35 +37,103 @@ export function verifyDomain(pubkey: string, dom: Buffer, msg: Buffer, sig: Buff
   return edVerify(null, Buffer.concat([dom, msg]), key, sig);
 }
 
-/** Extract the raw `payload` JSON text (byte-exact) from a SignedMessage body. */
-export function rawPayload(text: string): string | null {
-  const keyStr = '"payload"';
-  const k = text.indexOf(keyStr);
-  if (k < 0) return null;
-  let i = text.indexOf(':', k + keyStr.length);
-  if (i < 0) return null;
-  i += 1;
-  while (i < text.length && /\s/.test(text[i])) i += 1;
-  if (text[i] !== '{') return null;
-  let depth = 0;
-  let inStr = false;
-  let esc = false;
-  for (let j = i; j < text.length; j++) {
-    const c = text[j];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (c === '\\') esc = true;
-      else if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === '"') inStr = true;
-    else if (c === '{') depth += 1;
-    else if (c === '}') {
-      depth -= 1;
-      if (depth === 0) return text.slice(i, j + 1);
-    }
+// ─── C31-1 (rc9-f2, M): the payload that is verified is the payload that is read ───
+// Before, the signature was checked over the first `"payload"` text anywhere in the body, while discovery and plans
+// read JSON.parse's member (the LAST duplicate). A body with two payload keys (the first signed, the second forged)
+// passed signatureValid with forged claims, api.tls_sha256 included. Now only the body's own top-level members are
+// read (keys decoded, so "payload" counts), a second top-level payload refuses the body, and callers read
+// signedPayload(text): the exact text the signature covers.
+
+/** Index just past the JSON string that starts at text[i] (a '"'), or -1. */
+function stringEnd(text: string, i: number): number {
+  for (let j = i + 1; j < text.length; j++) {
+    if (text[j] === '\\') j += 1;
+    else if (text[j] === '"') return j + 1;
   }
-  return null;
+  return -1;
+}
+
+/** Index just past the JSON value that starts at text[i], or -1. */
+function valueEnd(text: string, i: number): number {
+  const c = text[i];
+  if (c === '"') return stringEnd(text, i);
+  if (c === '{' || c === '[') {
+    let depth = 0;
+    for (let j = i; j < text.length; j++) {
+      const d = text[j];
+      if (d === '"') {
+        const e = stringEnd(text, j);
+        if (e < 0) return -1;
+        j = e - 1;
+      } else if (d === '{' || d === '[') depth += 1;
+      else if (d === '}' || d === ']') {
+        depth -= 1;
+        if (depth === 0) return j + 1;
+      }
+    }
+    return -1;
+  }
+  let j = i;
+  while (j < text.length && !/[\s,}\]]/.test(text[j])) j += 1;
+  return j > i ? j : -1;
+}
+
+/** The raw text (byte-exact) of the body's single top-level `payload` object; null when absent, not an object,
+ *  given twice, or the body is not one JSON object. */
+export function rawPayload(text: string): string | null {
+  let i = 0;
+  const ws = (): void => { while (i < text.length && /\s/.test(text[i])) i += 1; };
+  ws();
+  if (text[i] !== '{') return null;
+  i += 1;
+  ws();
+  if (text[i] === '}') return null;
+  let found: string | null = null;
+  for (;;) {
+    ws();
+    if (text[i] !== '"') return null;
+    const ke = stringEnd(text, i);
+    if (ke < 0) return null;
+    let key: unknown;
+    try {
+      key = JSON.parse(text.slice(i, ke));
+    } catch (err) {
+      console.warn(`[nodeapi] signed body has an unreadable key: ${(err as Error).message}`);
+      return null;
+    }
+    i = ke;
+    ws();
+    if (text[i] !== ':') return null;
+    i += 1;
+    ws();
+    const ve = valueEnd(text, i);
+    if (ve < 0) return null;
+    if (key === 'payload') {
+      if (found !== null) {
+        console.warn('[nodeapi] signed body has more than one "payload" key: refused');
+        return null;
+      }
+      if (text[i] !== '{') return null;
+      found = text.slice(i, ve);
+    }
+    i = ve;
+    ws();
+    if (text[i] === ',') { i += 1; continue; }
+    if (text[i] === '}') return found;
+    return null;
+  }
+}
+
+/** The payload exactly as signed (parsed from rawPayload), or null. Read the claims from this, never from json. */
+export function signedPayload(text: string): Record<string, unknown> | null {
+  const raw = rawPayload(text);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch (err) {
+    console.warn(`[nodeapi] signed payload is not JSON: ${(err as Error).message}`);
+    return null;
+  }
 }
 
 export interface SignedBody { payload?: Record<string, unknown>; signature?: string; signer?: string }
@@ -92,6 +160,35 @@ export interface HttpsResult {
   latencyMs: number;
 }
 
+/** Audit U-4: most a server's answer may be (signed metadata is a few kB). More is cut off, so no server can fill memory. */
+export const MAX_BODY_BYTES = 1_000_000;
+
+/**
+ * Collect a response body up to `max` bytes. Past it: `onTooBig` is called (the caller tears the request down)
+ * and the promise rejects, so a server sending without end never grows the app's memory.
+ */
+export function collectBody(res: NodeJS.ReadableStream, max: number, onTooBig: (err: Error) => void): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let done = false;
+    res.on('data', (c: Buffer) => {
+      if (done) return;
+      size += c.length;
+      if (size > max) {
+        done = true;
+        const err = new Error(`answer larger than ${max} bytes`);
+        onTooBig(err);
+        reject(err);
+        return;
+      }
+      chunks.push(c);
+    });
+    res.on('end', () => { if (!done) { done = true; resolve(Buffer.concat(chunks)); } });
+    res.on('error', (err) => { if (!done) { done = true; reject(err); } });
+  });
+}
+
 export class TlsPinError extends Error {
   code = 'tls-pin-mismatch';
 }
@@ -111,10 +208,8 @@ export function httpsRequest(url: string, opts: { method?: string; pinSha256?: s
       agent: false, // fresh connection so the handshake hook always runs
       timeout: timeoutMs,
     }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8');
+      collectBody(res, MAX_BODY_BYTES, (err) => req.destroy(err)).then((body) => {
+        const text = body.toString('utf8');
         let json = null;
         try {
           json = text ? JSON.parse(text) : null;
@@ -122,7 +217,7 @@ export function httpsRequest(url: string, opts: { method?: string; pinSha256?: s
           console.warn(`[nodeapi] ${u.host}${u.pathname}: body is not JSON (${(err as Error).message})`);
         }
         resolve({ status: res.statusCode ?? 0, text, json, certSha256, latencyMs: Date.now() - started });
-      });
+      }, reject);
     });
     req.on('socket', (socket) => {
       socket.once('secureConnect', () => {

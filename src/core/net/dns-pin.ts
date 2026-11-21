@@ -2,7 +2,7 @@
 // While the kill switch holds the block with no tunnel up (a server switch, "Always" after a
 // restart), DNS is blocked but the RPC endpoints' addresses are let through: dvpnd permits them
 // and dials them by IP (its rpcpin). The app has to do the same, or every chain call fails with
-// "fetch failed" and the user can never reconnect through the block (test-host kesw18).
+// "fetch failed" and the user can never reconnect through the block (ddv-win-2 kesw18).
 // So: lookups for the RPC hosts answer from the last good result at once and refresh it in the
 // background; every other host goes to the normal resolver untouched.
 import dns from 'node:dns';
@@ -83,8 +83,8 @@ export function setPinFile(file: string): void {
 }
 
 // Q0390 (Azure India, TLX2 10-30): the RPC host resolves by location. Through the tunnel (a US node) the
-// app pinned 208.115.212.49; the kill switch allows only what dvpnd resolved on the direct path
-// (74.63.203.93). A held block between servers then dropped every app call. So keep the recent distinct
+// app pinned 203.0.113.49; the kill switch allows only what dvpnd resolved on the direct path
+// (198.51.100.93). A held block between servers then dropped every app call. So keep the recent distinct
 // answers, newest first, and hand them all out: Node's connect tries each in turn (autoSelectFamily, ~250 ms
 // per try), so the one the block admits connects and the others cost a moment.
 export const PIN_KEEP = 4;

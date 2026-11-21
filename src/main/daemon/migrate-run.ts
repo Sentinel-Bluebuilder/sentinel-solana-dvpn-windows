@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readToml, renderServiceConfig, TUN_SERVICES } from '../../core/daemon/config';
 import { CONFIG_FILE, legacyHome } from '../../core/daemon/layout';
+import { scErrorCode } from '../../core/daemon/service-state';
 import { migratedConfig, planHomeMigration, type HomeView, type MigrationPlan } from '../../core/daemon/migrate-home';
 
 export interface MigrateIo {
@@ -50,7 +51,7 @@ export async function runHomeMigration(opts: MigrateOptions, io: MigrateIo = rea
     try {
       if (step.kind === 'uninstall-old-service') {
         const q = await io.run('sc.exe', ['query', step.service]);
-        if (/FAILED 1060/.test(q.out)) { log.push(`old service ${step.service}: not installed`); continue; }
+        if (scErrorCode(q.out) === 1060) { log.push(`old service ${step.service}: not installed`); continue; }
         // The old binary's uninstall releases a persist kill switch the old service still holds (gap #84).
         if (opts.legacyDvpnd && io.exists(opts.legacyDvpnd)) {
           const r = await io.run(opts.legacyDvpnd, ['service', 'uninstall']);

@@ -1,5 +1,5 @@
 // ─── Where the cb33 daemon lives on each OS: names, paths, service, CLI arguments ───
-// Shared by every desktop app (the Windows app Windows, the Linux app Linux, the macOS app Mac; the Android app Android overrides the paths).
+// Shared by every desktop app (the Windows app Windows, the Linux app Linux, the macOS app Mac; #34 Android overrides the paths).
 // Upstream cb33092e (and the fork pinned on it) replaced the old layout:
 //   old: binary `dvpnd`, home <root>/dvpnd/client with config.toml + client/config.toml,
 //        `dvpnd init --role client`, key "device", socket_group in [daemon], our own service unit.
@@ -8,7 +8,7 @@
 //        [rpc] [tx]), per-service files <dir>/<service>/config.toml, key "operator" in <dir>/keys,
 //        and the service written by `sentinel-dvpnd service install` (socket group sentinel-dvpn).
 // Facts from sentinel-go-sdk/daemon/instance/instance.go and sentinel-dvpnd/cmd/sentinel-dvpnd
-// (init.go, service.go, systemd.go) on fork-cb33-1-rc (b036236). Pure functions: no fs, no process.
+// (init.go, service.go, systemd.go) on fork-cb33-1-ddv19 (b036236). Pure functions: no fs, no process.
 //
 // The ONE table every app uses (client instance c0: dvpnd has no default, `--instance` is required,
 // and c0 is the first client tag; folders are named after ProductName "sentinel-dvpn", only the
@@ -17,13 +17,19 @@
 //   linux    /var/lib/sentinel-dvpn/c0                          /var/lib/sentinel-dvpn/c0/daemon.sock                     sentinel-dvpnd@c0 (+ sentinel-dvpnd@c0.socket)
 //   darwin   /Library/Application Support/sentinel-dvpn/c0      <home>/daemon.sock                                        co.sentinel.sentinel-dvpnd.c0
 //   win32    %ProgramData%\sentinel-dvpn\c0                     \\.\pipe\ProtectedPrefix\Administrators\sentinel-dvpn\c0  sentinel-dvpnd$c0
+//   android  <filesDir>/sentinel-dvpn/c0                        <home>/daemon.sock                                        none (the app's VPN service runs it)
+// Android (GOOS "android"): the app always passes --home, since dvpnd's StateRoot is a root path an
+// app cannot write. dvpnd makes the home 0750 (prepareInstanceDir; no group change outside the state
+// root) with 0700 folders and 0600 files inside, in the app's private filesDir.
+// The app runs `sentinel-dvpnd run --instance c0 --home <home>` itself (DaemonProcess.kt has the
+// same names and args; keep both in step).
 // The macOS home has a SPACE: pass every path as its own argv entry (execFile, never a shell
 // string), and quote it in any script or unit text.
 
 export type Goos = 'linux' | 'darwin' | 'win32';
 
 // ─── Protocol bits (node accounts' `protocols` mask) ───
-// cb33 CHANGED the table (sentinel-go-sdk <proto>/<proto>.go protocolBit on fork-cb33-1-rc):
+// cb33 CHANGED the table (sentinel-go-sdk <proto>/<proto>.go protocolBit on fork-cb33-1-ddv19):
 //   wireguard 1<<0, v2ray 1<<1, openvpn 1<<2, amneziawg 1<<3, xray 1<<4, hysteria2 1<<5.
 // Before cb33 it was xray 4, openvpn 8, hysteria2 16, amneziawg 32: reading a cb33 node with that table
 // mislabels 4 of the 6 protocols (and the app dials the wrong service).
@@ -93,6 +99,14 @@ export const firewallObject = (tag = CLIENT_INSTANCE): string => `${PRODUCT_NAME
 /** Tag.EnvPath (Linux): the EnvironmentFile the systemd unit reads. */
 export const serviceEnvFile = (tag = CLIENT_INSTANCE): string => `/etc/${PRODUCT_NAME}/${checkTag(tag)}.env`;
 
+// ─── Android row (#34; carried by the Linux app from the shared layout f0bde887) ───
+const trimSlash = (dir: string): string => dir.replace(/\/+$/, '');
+/** The c0 home inside the app's files dir (Context.filesDir). */
+export const androidInstanceDir = (filesDir: string, tag = CLIENT_INSTANCE): string => `${trimSlash(filesDir)}/${PRODUCT_NAME}/${checkTag(tag)}`;
+export const androidEndpoint = (filesDir: string, tag = CLIENT_INSTANCE): string => `${androidInstanceDir(filesDir, tag)}/${SOCKET_FILE}`;
+/** The pre-cb33 Android home (config.toml + client/config.toml, key "device"). */
+export const androidLegacyHome = (filesDir: string): string => `${trimSlash(filesDir)}/dvpnd/client`;
+
 /** The pre-cb33 client home each app used (migrated once into the c0 instance). */
 export function legacyHome(goos: Goos): string {
   if (goos === 'darwin') return '/var/db/dvpnd/client';
@@ -109,6 +123,8 @@ const at = (home?: string): string[] => ['--instance', CLIENT_INSTANCE, ...(home
 export const initArgs = (home: string, owner: string): string[] => ['init', ...at(home), '--owner', owner, '--plain-key'];
 /** `sentinel-dvpnd key list` (the daemon binary's own key command, main.go NewKeyCmd; --instance/--home are global). */
 export const keyListArgs = (home?: string): string[] => ['key', 'list', ...at(home)];
+/** The long-running daemon (on Android the app's VPN service runs this itself). */
+export const runArgs = (home: string): string[] => ['run', ...at(home)];
 export const doctorArgs = (home?: string): string[] => ['doctor', ...at(home)];
 /** `service install|start|stop|restart|status|uninstall`: root or administrator only. */
 export const serviceArgs = (action: 'install' | 'start' | 'stop' | 'restart' | 'status' | 'uninstall'): string[] => ['service', action, ...at()];

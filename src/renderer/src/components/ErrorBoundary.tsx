@@ -1,6 +1,7 @@
 // ─── ErrorBoundary: a crashed screen shows "This screen hit a problem." with Try again ───
 // Own file so tests/unit/error-boundary.test.ts can drive it without the App shell (Q0268).
 import { Component, type ReactNode } from 'react';
+import { tr } from '../../../shared/i18n';
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -10,9 +11,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     if (!this.state.error) return this.props.children;
     return (
       <div className="card m-6">
-        <h2 className="mb-2 font-semibold">This screen hit a problem.</h2>
-        <p className="mb-4 text-sm text-fg-dim">Your connection is not affected. {this.state.error.message}</p>
-        <button className="btn-ghost" data-error-retry onClick={() => this.setState({ error: null })}>Try again</button>
+        <h2 className="mb-2 font-semibold">{tr('This screen hit a problem.')}</h2>
+        <p className="mb-4 text-sm text-fg-dim">{tr('Your connection is not affected. {message}', { message: this.state.error.message })}</p>
+        <button className="btn-ghost" data-error-retry onClick={() => this.setState({ error: null })}>{tr('Try again')}</button>
       </div>
     );
   }

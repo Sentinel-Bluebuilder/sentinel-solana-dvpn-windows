@@ -147,16 +147,16 @@
     {
       "name": "sentinel-dvpnd",
       "title": "Sentinel dVPN daemon (dvpnd)",
-      "version": "fork-cb33-4-final6.5 (90014b2)",
+      "version": "fork-cb33-4-final6.14 (0d8410f)",
       "path": "resources/bin/sentinel-dvpnd.exe",
-      "sha256": "8203598ab3a3b4d015bdc33e8e17478e33844dccf6c6d48cba1e090c143a0153",
+      "sha256": "49560b200c5ac1d0d39f06eb56d2507216d242ac8a8662f3016654357c7d5197",
       "license": "Sentinel dVPN License",
       "licenseUrl": "https://github.com/sentinel-official/sentinel-solana/blob/main/LICENSE",
       "sourceUrl": "https://github.com/sentinel-official/sentinel-solana",
-      "note": "cb33 daemon, fork-cb33-4-final6.5 (90014b2). final6.5 = final6.4 d112ac0 + Q0480 (an idle gap before a fresh request no longer counts as a receive stall) + Q0459 (CLI reports an honest reconnecting state); final6.4 = final6.1 + Q0445 rx-stall fast floor (a tunnel that receives nothing is reported within 2 s). final6.1 = final6 630e232 + Q0469 (sentinel-dvpn status no longer blocks >5 s at dvpnd stop/restart: CLI dial deadline) + dvpnd client/node fixes + sidecar path log. final6 630e232 = final5 718d25d + Q0445, Q0453, Q0433, Q0458 (dvpnd key sweep), Q0460, Q0461 (orphan tunnel removed on restart). final5 718d25d = final4.1 + Q0444 (a 10 s network cut no longer ends the session as credit-exhausted [client-side]). Earlier lineage: final3 131d3a2 (final2 9a2e810 + rate-limited chain-read retries [Q0441 PR#62]; TLS handshake uses client timeout; wgcore refused-tool error naming; kill switch off never blocks on reconnect [traffic goes direct]; client delegate check at start+connect [PR#64]) + final4/4.1. ./cmd/sentinel-dvpnd, Go 1.27.3 -trimpath, devnet ldflags (program J52dyXW3, mint Hen2LVP6); built on the build host from the final6.5 tag (MANIFEST 90014b2, SHA256SUMS verified); never vendored into this repo",
+      "note": "final6.14 11-13 (tag fork-cb33-4-final6.14 = 0d8410f, ctl-1 ~/final-cb33-614/{bin,MANIFEST,SHA256SUMS,notices}): final6.13 (Q0549 userspace WG/AWG exit, no Windows change) + 0d8410f Q0557 (a server switch under the kill switch moves the block to the new server before Discover; failing later keeps it). final6.12 11-13 (f99ca49, ctl-1 ~/final-cb33-612/{bin,MANIFEST,SHA256SUMS,notices}): final6.11 + f99ca49 (Q0547 part 2: a normal user's doctor reads the kill switch store as skip also when the denial shows at the first query; for such a caller ANY store error is skip, accepted because the service re-checks at start, DIR 11-13). final6.11 11-13 (9d21e47, ctl-1 ~/final-cb33-611/{bin,MANIFEST,SHA256SUMS,notices}): final6.10 + 9d21e47 (Q0549 a crashed engine process redials on the channel instead of ending the session). final6.10 11-13 (479f5a3, ctl-1 ~/final-cb33-610/{bin,MANIFEST,SHA256SUMS,notices}): final6.9 edfea87 + e2b2a9a (Q0547 doctor severity skip for checks a normal user cannot run) + 83aafcc (Q0548 Windows service restart count resets after 1 h, was 24 h) + 479f5a3 (OpenVPN doctor minimum 2.6.23, the shipped release, proven with DCO). final6.9 11-12 (edfea87): final6.7 2e6ea49 + 4d776ab (final6.8, Q0538 kill switch + app split: pf list / nft set; Windows WFP unchanged) + edfea87 (Q0542 doctor bounded: --timeout 60 s for every check + a deadline guard; macOS sfltool only as root). Earlier: b5640ab (Q0487/Q0494 Windows Hy2 late permit guard), 2e6ea49 (Q0488 pipe-allow.txt, Q0503 log volume). devnet ldflags (program J52dyXW3, mint Hen2LVP6), go1.27.3 -trimpath, built on ddv3-dvw-build. Never vendored into this repo.",
       "arm64": {
         "path": "build/arm64/sentinel-dvpnd.exe",
-        "sha256": "125200cefb408d36552db9ddfee8844e84f3d8aaa526ae7ad66e7e00bcbacb82"
+        "sha256": "96668a9719163c77df9eefb8b3c63e387efadebfe47b9d2e513b0bf52b546694"
       }
     },
     {
@@ -214,6 +214,6 @@
   ],
   "_gpl_comment": "GPL-2.0 components (OpenVPN) require an offer of corresponding source. The offer text goes into THIRD-PARTY-NOTICES; the sourceTarballs on the openvpn dep are the corresponding source, verified at release time (fetch-deps --release) which FAILS if any is missing.",
   "gpl": {
-    "writtenOffer": "This product bundles OpenVPN (GPL-2.0). You may obtain the complete corresponding source code of the exact version bundled for three years from the release date, either from the Source links listed for OpenVPN below, or by request to the project's issue tracker at https://github.com/Sentinel-Bluebuilder/devnet-dvpn (we will point you to a download of the pinned source archive, which is the same code built into the bundled installer)."
+    "writtenOffer": "This product bundles OpenVPN (GPL-2.0). You may obtain the complete corresponding source code of the exact version bundled for three years from the release date, either from the Source links listed for OpenVPN below, or by request to the project's issue tracker at https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows (we will point you to a download of the pinned source archive, which is the same code built into the bundled installer)."
   }
 }

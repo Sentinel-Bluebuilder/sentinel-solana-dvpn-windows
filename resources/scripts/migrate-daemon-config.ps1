@@ -17,6 +17,24 @@ if (-not (Test-Path -LiteralPath $cfg -PathType Leaf)) {
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $changed = 0
 
+# Q0544 (Windows): never rewrite a live config in place (power loss mid-write left config.toml empty).
+# Write <path>.new in the same folder, flush it to disk, then swap it in with ReplaceFile (atomic on NTFS).
+function Write-FileAtomic([string]$Path, [string]$Text) {
+  $tmp = "$Path.new"
+  $fs = [System.IO.File]::Open($tmp, 'Create', 'Write', 'None')
+  try {
+    $bytes = $utf8.GetBytes($Text)
+    $fs.Write($bytes, 0, $bytes.Length)
+    $fs.Flush($true)
+  } finally { $fs.Dispose() }
+  try {
+    [System.IO.File]::Replace($tmp, $Path, [NullString]::Value)
+  } catch {
+    Write-Warning "atomic replace of $Path failed ($($_.Exception.Message)); moving instead"
+    Move-Item -LiteralPath $tmp -Destination $Path -Force
+  }
+}
+
 # Kill switch 'on' -> 'persist' (11-07): the daemon's 'on' lifts the block whenever the service stops,
 # so a restart or an update sent traffic direct. The app has one "On" = persist (config.ts
 # writtenKillSwitch); this moves older configs and init's default 'on' before the service starts.
@@ -32,7 +50,7 @@ if (Test-Path -LiteralPath $ksMark -PathType Leaf) {
   $new = [regex]::Replace($text, "(?m)^(\s*kill_switch\s*=\s*)(['""])on(['""])", '${1}${2}persist${3}')
   if ($new -ne $text) {
     Copy-Item -LiteralPath $cfg -Destination "$cfg.pre-migrate" -Force
-    [System.IO.File]::WriteAllText($cfg, $new, $utf8)
+    Write-FileAtomic $cfg $new
     $changed++
     Write-Output "migrated $cfg (kill switch on -> persist)"
   }
@@ -49,7 +67,7 @@ foreach ($s in 'v2ray', 'xray') {
   # Top-level key: insert before the first [section] (or append when there is none).
   $m = [regex]::Match($text, '(?m)^\s*\[')
   $text = if ($m.Success) { $text.Insert($m.Index, "tun = true`n") } else { $text.TrimEnd() + "`ntun = true`n" }
-  [System.IO.File]::WriteAllText($path, $text, $utf8)
+  Write-FileAtomic $path $text
   $changed++
   Write-Output "migrated $path (whole-device on)"
 }

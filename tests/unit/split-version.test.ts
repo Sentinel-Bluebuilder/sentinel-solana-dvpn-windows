@@ -1,4 +1,4 @@
-// ─── Split support is never denied by an unfamiliar dvpnd tag (Q0366 pass 3, QA fedora) ───
+// ─── Split support is never denied by an unfamiliar dvpnd tag (Q0366 pass 3, FLX2 fedora) ───
 // `split status` said "Split tunnelling needs a newer VPN service" for all six protocols against pin
 // dvpnd cf4c-2038a5f-pin, which applied the split: the check read a ddv build number from the tag and
 // a pin/release tag has none. Only a tag that names an older ddv build may say "newer".
@@ -19,11 +19,11 @@ describe('dvpnd build from its tag', () => {
   });
 
   it('a tag naming an older ddv build still says a newer service is needed', () => {
-    expect(ddv('cf4c372-rc')).toBe(18);
-    expect(splitNotApplied({ daemonVersion: 'cf4c372-rc', service: 'wireguard', killSwitch: 'off', platform: 'linux' })).toMatch(NEWER);
-    expect(splitNotApplied({ daemonVersion: 'cf4c372-rc', service: 'wireguard', killSwitch: 'off', platform: 'linux' })).toMatch(NEWER);
-    expect(splitNotApplied({ daemonVersion: 'cf4c372-rc', service: 'wireguard', killSwitch: 'off', platform: 'linux' })).toBeNull();
-    expect(daemonSupportsSplit('cf4c372-rc')).toBe(false);
+    expect(ddv('cf4c372-ddv18.37-rc3')).toBe(18);
+    expect(splitNotApplied({ daemonVersion: 'cf4c372-ddv10', service: 'wireguard', killSwitch: 'off', platform: 'linux' })).toMatch(NEWER);
+    expect(splitNotApplied({ daemonVersion: 'cf4c372-ddv11', service: 'wireguard', killSwitch: 'off', platform: 'linux' })).toMatch(NEWER);
+    expect(splitNotApplied({ daemonVersion: 'cf4c372-ddv12', service: 'wireguard', killSwitch: 'off', platform: 'linux' })).toBeNull();
+    expect(daemonSupportsSplit('cf4c372-ddv10')).toBe(false);
   });
 
   it('no tag, or the pre-ddv base, is the oldest build', () => {
@@ -39,13 +39,13 @@ describe('dvpnd build from its tag', () => {
 describe('Windows kill switch x protocol from the real tags', () => {
   const KS_PROTOCOLS = ['wireguard', 'amneziawg', 'openvpn'];
   it('pin and combined-build tags never refuse a protocol', () => {
-    for (const tag of ['cf4c-276fca5-pin', 'cf4c-2038a5f-pin', 'cf4c372-rc-final', 'cf4c372-rc', 'cf4c-20879d1-lab-split']) {
+    for (const tag of ['cf4c-276fca5-pin', 'cf4c-2038a5f-pin', 'cf4c372-ddv18.37-cb-final', 'cf4c372-ddv18.37-rc4', 'cf4c-20879d1-lab-split']) {
       for (const p of KS_PROTOCOLS) expect(killSwitchBlocksProtocol('win32', 'on', p, tag), `${tag} ${p}`).toBeNull();
       expect(splitNotApplied({ daemonVersion: tag, service: 'wireguard', killSwitch: 'on', platform: 'win32' }), tag).toBeNull();
     }
   });
-  it('a dvpnd older than the fix (rc, or no tag) still refuses', () => {
-    for (const tag of ['cf4c372-rc', '', null]) {
+  it('a dvpnd older than the fix (ddv4, or no tag) still refuses', () => {
+    for (const tag of ['cf4c372-ddv4', '', null]) {
       for (const p of KS_PROTOCOLS) expect(killSwitchBlocksProtocol('win32', 'on', p, tag), String(tag)).not.toBeNull();
     }
   });

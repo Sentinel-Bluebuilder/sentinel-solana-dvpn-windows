@@ -1,6 +1,6 @@
 // ─── Internet reachability (F14.3) ───
 // Only TCP connects, no data sent, so it works with third-party checks off. Never the RPC hosts:
-// since rc the kill switch PERMITS them (a switch or reconnect must pay through the block), so
+// since ddv18 the kill switch PERMITS them (a switch or reconnect must pay through the block), so
 // reaching them proves nothing - the app said "Ready" while the kill switch blocked everything
 // else (VM ui-win-1 2026-10-22, WireGuard killed with KS on). A plain site by name (needs DNS,
 // which the block also stops), then public anycast addresses on 443. One success is enough.

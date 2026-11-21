@@ -36,6 +36,8 @@ step('typecheck', 'npm run typecheck');
 if (skipTests) console.log('\n─── unit tests SKIPPED (--skip-tests) ───');
 else step('unit tests', 'npm test');
 step('app build', 'npm run build');
+// K-M4-5 (rc9-c2): a release never carries the UI test hooks (a build made with DVPN_DEV_HOOKS set fails here).
+step('no UI test hooks in the build (K-M4-5)', 'node scripts/check-dev-hooks-payload.mjs');
 step('CLI build', 'npm run build:cli');
 if (!process.env.CSC_LINK && !process.env.WIN_CSC_LINK) {
   console.log('\nnote: no CSC_LINK set → the installers are UNSIGNED (SmartScreen will say "Unknown publisher")');
@@ -46,7 +48,7 @@ const dist = path.join(ROOT, 'dist');
 // public devnet RPC, src/core/chain/rpc.ts DEFAULT_RPC_URLS); our test rigs inject their lane URL only at setup
 // time. Fail the build if a key ever leaks into the packaged payload — the unpacked dir holds the asar, the
 // bundled daemon/protocol exes and the WireGuard/AmneziaWG/OpenVPN MSIs, so -a scans those binaries as text too.
-// Mirrors scripts/release-mac.mjs scanSecrets (QA, which scans the .app bundle). (DIR 11-08)
+// Mirrors scripts/release-mac.mjs scanSecrets (FMC, which scans the .app bundle). (DIR 11-08)
 function scanSecrets(arch) {
   const unpacked = path.join(dist, arch === 'x64' ? 'win-unpacked' : 'win-arm64-unpacked');
   if (!fs.existsSync(unpacked)) throw new Error(`secret scan: ${arch} payload ${path.relative(ROOT, unpacked)} not found (nothing scanned — refusing to pass)`);

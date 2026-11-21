@@ -10,6 +10,13 @@ import { filterApps, sameNameApps } from '../core/split/apps';
 import { splitNotApplied } from '../core/session/state';
 import { PROTOCOLS, protocolLabel } from '../shared/protocols';
 
+/** An example --split-apps value for this OS (the CLI runs on it). */
+const SPLIT_APPS_EXAMPLE: Partial<Record<NodeJS.Platform, string>> = {
+  win32: 'C:\\a.exe;C:\\b.exe',
+  darwin: '/Applications/Firefox.app/Contents/MacOS/firefox;...',
+  linux: '/usr/bin/firefox;...',
+};
+
 /** Per protocol: null = applied, else the reason (same function the page and connect use). */
 export function splitSupportRows(o: { daemonVersion: string | null; killSwitch?: string; wholeDevice?: boolean; hasApps: boolean; platform: string }): Array<{ protocol: string; reason: string | null }> {
   return PROTOCOLS.map((p) => ({ protocol: p, reason: splitNotApplied({ ...o, service: p }) }));
@@ -28,17 +35,17 @@ export const splitCmd: Cmd = async (a, o) => {
       `Mode     ${s.mode} (${mode})`,
       `Apps     ${s.apps.length ? s.apps.join('\n         ') : 'none'}`,
       `Routes   ${s.routes.length ? s.routes.join(', ') : 'none'}`,
-      `Service  ${version ?? 'not running'} · kill switch ${d.settings.killSwitch ?? 'off'}`,
+      `Service  ${version ?? 'not running'}, kill switch ${d.settings.killSwitch ?? 'off'}`,
       '',
       ...rows.map((r) => `${protocolLabel(r.protocol).padEnd(10)} ${r.reason ?? 'applied'}`),
       '',
-      'Change it: daemon set --split-mode off|include|exclude --split-apps "C:\\a.exe;C:\\b.exe"|none --split-routes "CIDR,CIDR"|none --yes',
+      `Change it: daemon set --split-mode off|include|exclude --split-apps "${SPLIT_APPS_EXAMPLE[process.platform] ?? SPLIT_APPS_EXAMPLE.win32}"|none --split-routes "CIDR,CIDR"|none --yes`,
     ];
     o.print(lines.join('\n'), { split: s, daemonVersion: version, protocols: rows });
   } else if (sub === 'apps') {
     const chosen = getDaemonSettings().settings.split?.apps ?? [];
     const v = await listApps(chosen);
-    if (!v.supported) { o.print('Choosing apps from a list works on Windows only. Give full paths to daemon set --split-apps.', v); return; }
+    if (!v.supported) { o.print('The app list is not available here. Give full paths to daemon set --split-apps.', v); return; }
     const q = typeof a.flags.search === 'string' ? a.flags.search : '';
     const apps = filterApps(v.apps, q);
     const mark = (p: string): string => (chosen.includes(p) ? '*' : ' ');

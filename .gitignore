@@ -34,5 +34,6 @@ lock-*
 secrets/
 *wallet*.keystore
 id.json
+!docs/i18n/terms/id.json
 client.json
 /results/

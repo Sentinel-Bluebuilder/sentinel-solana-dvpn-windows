@@ -60,9 +60,33 @@ export async function dnsReallyLeftOver(vpnServers: string[] | undefined): Promi
  * session fails and stays failed for a while. Same as `ipconfig /flushdns`; needs no admin.
  * Fire and forget, logged.
  */
+/** What a failed flush is logged with (row 134: the owner's log had 14 of these carrying only "Command failed",
+ *  so none could be explained). ipconfig prints its reason on stdout, so both streams are kept, cut short. */
+export function flushFailure(err: Error, stdout: unknown, stderr: unknown): Record<string, unknown> {
+  const e = err as Error & { code?: number | string | null; signal?: string | null; killed?: boolean };
+  const cut = (s: unknown): string => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return { err: e.message.split('\n')[0], code: e.code ?? null, signal: e.signal ?? null, timedOut: e.killed === true, stdout: cut(stdout), stderr: cut(stderr) };
+}
+
+/** Row 134, the reason found once it was logged (owner's laptop, build 9bf682c): "The requested operation
+ *  requires elevation". This Windows does not let a standard user clear the DNS cache, and the app never raises
+ *  an administrator prompt for it. That is not a fault of this run: said once at info, and not tried again
+ *  until the app restarts. Any other failure is still a warning. */
+export const flushNeedsAdmin = (f: Record<string, unknown>): boolean => /requires elevation|access is denied/i.test(`${String(f.stdout)} ${String(f.stderr)} ${String(f.err)}`);
+let flushNotAllowed = false;
+/** Tests: forget that this Windows refused the flush. */
+export const resetFlushState = (): void => { flushNotAllowed = false; };
+
 export function flushDnsCache(): void {
-  if (process.platform !== 'win32') return;
-  execFile('ipconfig.exe', ['/flushdns'], { timeout: 10_000, windowsHide: true }, (err) => {
-    if (err) log.warn('flushing the DNS cache failed', { err: err.message });
+  if (process.platform !== 'win32' || flushNotAllowed) return;
+  execFile('ipconfig.exe', ['/flushdns'], { timeout: 10_000, windowsHide: true }, (err, stdout, stderr) => {
+    if (!err) return;
+    const f = flushFailure(err, stdout, stderr);
+    if (flushNeedsAdmin(f)) {
+      flushNotAllowed = true;
+      log.info('this Windows lets only an administrator clear the DNS cache; skipped from now on (the first lookups after a connect may be slow)', f);
+      return;
+    }
+    log.warn('flushing the DNS cache failed', f);
   });
 }

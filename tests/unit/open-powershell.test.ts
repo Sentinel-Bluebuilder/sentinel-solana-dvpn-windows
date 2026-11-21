@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { powerShellLaunch } from '../../src/main/services/cli-exec';
 
 describe('Open in PowerShell launch (Q0295)', () => {
-  const script = `$env:DVPN_DATA_DIR = 'C:\Home\a b\data'; function global:x { a @args 2>&1 | ForEach-Object { "$_" } }`;
+  const script = `$env:DVPN_DATA_DIR = 'C:\Users\a b\data'; function global:x { a @args 2>&1 | ForEach-Object { "$_" } }`;
   const l = powerShellLaunch(script);
 
   it('cmd gets the command line verbatim, start with an explicit title', () => {

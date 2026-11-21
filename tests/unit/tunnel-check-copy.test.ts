@@ -28,7 +28,7 @@ describe('tunnel check copy (Q0357)', () => {
     expect(c.retry).toBe(true);
   });
 
-  // Q0369 (QA 11-09, final 0.2.0 x64): the real Windows text carries one raw dial line per probe target.
+  // Q0369 (WINFIN 11-09, final 0.2.0 x64): the real Windows text carries one raw dial line per probe target.
   // No user-facing copy (connect error, session list, history) may show any of it; the raw text is for logs only.
   const WIN_DEAD =
     'calling daemon: rpc error: code = FailedPrecondition desc = failed precondition: no traffic passes through the tunnel: ' +

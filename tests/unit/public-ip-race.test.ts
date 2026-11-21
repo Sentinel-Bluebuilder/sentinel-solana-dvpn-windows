@@ -2,10 +2,10 @@ import net from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { IP_SERVICES, dialHost, firstIp, ipFromBody } from '../../src/core/quality/quality';
 
-// Q0365 (QA, DIR): "checking your IP" waited on the session's slow DNS (28–111 s on Linux with
+// Q0365 (FLX2, DIR): "checking your IP" waited on the session's slow DNS (28–111 s on Linux with
 // HNSDNS). It now asks services that need no DNS at the same time as the named ones.
 describe('public IP check', () => {
-  // QA: the IPv6 literal was dialed (and sent as SNI) still bracketed, so that service always failed.
+  // FLX: the IPv6 literal was dialed (and sent as SNI) still bracketed, so that service always failed.
   it('dials an IPv6 literal bare, names and IPv4 unchanged', () => {
     expect(dialHost(new URL('https://[2606:4700:4700::1111]/cdn-cgi/trace'))).toBe('2606:4700:4700::1111');
     expect(net.isIP(dialHost(new URL('https://[2606:4700:4700::1111]/x')))).toBe(6);

@@ -1,12 +1,12 @@
 // ─── cb33 daemon layout + the one instance config.toml (shared across the desktop apps) ───
 // Fixture tests/fixtures/cb33-c0-config.toml is the real file `sentinel-dvpnd init --instance c0`
-// wrote (fork-cb33-1-rc, owner = a dummy address). Legacy fixtures are the pre-cb33 pair.
+// wrote (fork-cb33-1-ddv19, owner = a dummy address). Legacy fixtures are the pre-cb33 pair.
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
   CLIENT_INSTANCE, DAEMON_GROUP, daemonBinaryName, daemonEndpoint, doctorArgs, firewallObject, initArgs, instanceDir,
-  keyListArgs, legacyHome, operatorKey, serviceArgs, serviceEnvFile, serviceName, stateRoot, tunnelInterface,
+  keyListArgs, legacyHome, operatorKey, serviceArgs, runArgs, androidInstanceDir, androidEndpoint, androidLegacyHome, serviceEnvFile, serviceName, stateRoot, tunnelInterface,
 } from '../../src/core/daemon/layout';
 import { carrySettingsInto, parseConfig, readToml, renderConfig, type DaemonSettings } from '../../src/core/daemon/config';
 
@@ -47,6 +47,16 @@ describe('cb33 layout per OS (instance.go on fork-cb33-1)', () => {
     expect(doctorArgs('/h')).toEqual(['doctor', '--instance', 'c0', '--home', '/h']);
     expect(serviceArgs('install')).toEqual(['service', 'install', '--instance', 'c0']);
     expect(initArgs('/s', 'O').join(' ')).not.toContain('--role');
+    // Android: DaemonProcess.kt runs the same args (ProtocolBitsTest.kt checks the Kotlin side)
+    expect(runArgs('/h')).toEqual(['run', '--instance', 'c0', '--home', '/h']);
+  });
+  it('Android row: the c0 home in the app files dir', () => {
+    expect(androidInstanceDir('/data/user/0/x/files/')).toBe('/data/user/0/x/files/sentinel-dvpn/c0');
+    expect(androidEndpoint('/data/user/0/x/files')).toBe('/data/user/0/x/files/sentinel-dvpn/c0/daemon.sock');
+    expect(androidLegacyHome('/f')).toBe('/f/dvpnd/client');
+    // a unix socket path must stay under 108 bytes; a long package name still fits
+    expect(androidEndpoint('/data/user/0/network.sentinel.devnetdvpn/files').length).toBeLessThan(108);
+    expect(() => androidInstanceDir('/f', '../x')).toThrow();
   });
   it('operator key, or the device key of an old home', () => {
     expect(operatorKey([{ name: 'other' }, { name: 'operator', pk: 1 }])).toEqual({ name: 'operator', pk: 1 });
@@ -59,7 +69,7 @@ const SETTINGS: DaemonSettings = {
   killSwitch: 'on', allowLan: true, dnsServers: ['9.9.9.9'], dnsMode: 'resolvconf', basis: 'per_hour',
   escrow: '5000000', prepayBytes: '0', prepaySeconds: '120',
   rpcUrl: 'https://rpc.example.org', rpcWsUrl: 'wss://rpc.example.org',
-  split: { mode: 'exclude', apps: ['/usr/bin/firefox'], routes: ['10.0.0.0/8'] },
+  split: { mode: 'exclude', apps: ['/Applications/Firefox.app/Contents/MacOS/firefox'], routes: ['10.0.0.0/8'] },
 };
 
 describe('the one instance config.toml', () => {
@@ -77,7 +87,7 @@ describe('the one instance config.toml', () => {
     expect(readToml(out, '', 'escrow_base_units')).toBe('5000000');
     expect(readToml(out, 'network', 'kill_switch')).toBe('persist'); // Q0426: On = persist
     expect(readToml(out, 'network', 'dns_backend')).toBe('resolvconf');
-    expect(readToml(out, 'split', 'apps')).toEqual(['/usr/bin/firefox']);
+    expect(readToml(out, 'split', 'apps')).toEqual(['/Applications/Firefox.app/Contents/MacOS/firefox']);
     expect(readToml(out, 'rpc', 'url')).toBe('https://rpc.example.org');
     // nothing cb33 does not read: no socket_group, no stray section, the rest of the file kept
     expect(out).not.toContain('socket_group');

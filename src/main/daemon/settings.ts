@@ -9,7 +9,7 @@ import path from 'node:path';
 import { parseConfig, parseWholeDevice, readToml, renderConfig, renderServiceConfig, TUN_SERVICES, validateForApply, type DaemonSettings } from '../../core/daemon/config';
 import { CONFIG_FILE } from '../../core/daemon/layout';
 import { splitNotApplied } from '../../core/session/state';
-import { DAEMON_SERVICE, DEFAULT_DAEMON_HOME, daemonInfo, deviceRecord, relinkDaemon, scriptPath, startServiceIfStopped } from './manager';
+import { DAEMON_SERVICE, appUserAccount, binPath, DEFAULT_DAEMON_HOME, daemonInfo, deviceRecord, relinkDaemon, scriptPath, startServiceIfStopped } from './manager';
 import { runElevated } from '../system/elevate';
 import { log } from '../logger';
 import { getHost } from '../host';
@@ -33,14 +33,37 @@ function readServiceConfigs(): Partial<Record<(typeof TUN_SERVICES)[number], str
   return out;
 }
 
+// Q0544 (DVPN-LINUX, a spot preemption cut a root write in place): a config that exists but is empty is never
+// read as 'no settings'; an Apply would render a whole config from nothing.
+let lastReadEmpty = false;
+export { EMPTY_SETTINGS_COPY } from '../../shared/settings-copy';
+import { EMPTY_SETTINGS_COPY } from '../../shared/settings-copy';
+import { tr } from '../../shared/i18n';
+
 function readLive(): string | null {
+  lastReadEmpty = false;
   try {
-    return fs.readFileSync(path.join(home(), CONFIG_FILE), 'utf8');
+    const text = fs.readFileSync(path.join(home(), CONFIG_FILE), 'utf8');
+    if (!text.trim()) {
+      lastReadEmpty = true;
+      log.warn('daemon config is empty; not using it', { file: path.join(home(), CONFIG_FILE) });
+      return null;
+    }
+    return text;
   } catch (err) {
-    log.warn('daemon config not readable as this user', { err: (err as Error).message });
+    // Windows VM 2026-11-15 (c975868): 79 of these in 65 s on a fresh install, one per read. A file that is not
+    // there yet (the service is not installed) is not a warning; any reason is logged once, then once a minute.
+    const msg = (err as Error).message;
+    const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
+    const t = Date.now();
+    if (msg !== lastUnreadable.msg || t - lastUnreadable.at >= 60_000) {
+      lastUnreadable = { msg, at: t };
+      log[missing ? 'info' : 'warn'](missing ? 'no daemon config yet (the VPN service is not installed)' : 'daemon config not readable as this user', { err: msg });
+    }
     return null;
   }
 }
+let lastUnreadable = { msg: '', at: 0 };
 
 /**
  * True when this V2Ray/Xray session runs in whole-device mode (Windows TUN): every app is
@@ -90,21 +113,23 @@ export function appliedAnyway(staged: string, live: string | null, running: bool
 }
 
 /** missing = the service was never set up on this computer (no config file), not a permission problem. */
-export function getDaemonSettings(): { readable: boolean; missing?: boolean; settings: Partial<DaemonSettings> } {
+export function getDaemonSettings(): { readable: boolean; missing?: boolean; empty?: boolean; settings: Partial<DaemonSettings> } {
   const live = readLive();
-  if (live === null) return { readable: false, missing: !fs.existsSync(path.join(home(), CONFIG_FILE)), settings: {} };
+  if (live === null) return { readable: false, missing: !fs.existsSync(path.join(home(), CONFIG_FILE)), ...(lastReadEmpty ? { empty: true } : {}), settings: {} };
   const wholeDevice = parseWholeDevice(Object.values(readServiceConfigs()));
   return { readable: true, settings: { ...parseConfig(live), ...(wholeDevice !== undefined ? { wholeDevice } : {}) } };
 }
 
 export async function applyDaemonSettings(next: DaemonSettings): Promise<{ ok: boolean; error?: string }> {
+  // Q0544: an empty config first; validating against it gave unrelated errors ('Basis must be per_gb or per_hour.').
+  if (getDaemonSettings().empty) return { ok: false, error: EMPTY_SETTINGS_COPY };
   // Q0468/Q0478: the stored http RPC gate is carried through; a newly typed RPC stays https-only.
   validateForApply(next, getDaemonSettings().settings);
   // Q0338: dvpnd caps the prepay without a word; say it once here.
   const capped = prepayOverCap(next.prepayBytes, next.prepaySeconds);
   if (capped.length) log.warn('prepay above the service cap; dvpnd will use the cap', { capped, capBytes: String(PREPAY_CAP_BYTES), capSeconds: String(PREPAY_CAP_SECONDS) });
   const live = readLive();
-  if (live === null) return { ok: false, error: 'This app cannot read the VPN service settings on this account. Run the app once as administrator or re-run setup.' };
+  if (live === null) return { ok: false, error: tr('This app cannot read the VPN service settings on this account. Run the app once as administrator or re-run setup.') };
   const out = renderConfig(live, next);
   const staged = path.join(getHost().dataDir, 'staged');
   fs.mkdirSync(staged, { recursive: true });
@@ -117,7 +142,10 @@ export async function applyDaemonSettings(next: DaemonSettings): Promise<{ ok: b
       fs.writeFileSync(path.join(staged, `${s}.config.toml`), renderServiceConfig(text, next.wholeDevice), 'utf8');
     }
   }
-  const r = await runElevated(scriptPath('apply-daemon-config.ps1'), { Staged: staged, DaemonHome: home(), Service: DAEMON_SERVICE });
+  // 8070712: appUserAccount() is '' for a machine account (the app run as SYSTEM or a service); elevate refuses an
+  // empty value, so User is left out then and the script skips the pipe grant (SYSTEM is admitted already).
+  const user = appUserAccount();
+  const r = await runElevated(scriptPath('apply-daemon-config.ps1'), { Staged: staged, DaemonHome: home(), Service: DAEMON_SERVICE, Bridge: binPath('pipe-bridge.exe'), ...(user ? { User: user } : {}) });
   log.info('daemon settings apply', { status: r.status, detail: r.detail });
   relinkDaemon();
   if (r.status === 'ok') return { ok: true };
@@ -126,11 +154,26 @@ export async function applyDaemonSettings(next: DaemonSettings): Promise<{ ok: b
   // with the service running means the change is in.
   if (r.status === 'error') {
     const after = readLive();
-    const running = (await startServiceIfStopped().catch(() => 'failed')) === 'running';
+    // CODE-AUDIT E13: 'started' (it was stopped and is up now) is running too; only 'running' counted before, so an
+    // apply that went in was reported failed when the service had to be started again.
+    const svc = await startServiceIfStopped().catch((e: unknown) => { log.warn('service check after the apply failed', { err: (e as Error).message }); return 'failed'; });
+    const running = svc === 'running' || svc === 'started';
     if (appliedAnyway(out, after, running)) {
       log.info('daemon settings applied although the admin step reported an error', { detail: r.detail });
       return { ok: true };
     }
   }
   return { ok: false, error: r.detail };
+}
+
+/**
+ * The routes an exclude split leaves outside the VPN for this session, so a check (public IP) never asks
+ * a service the split sends direct (the Linux app 2026-10-22: it answered with the user's own IP). Empty unless the
+ * session runs an exclude split.
+ */
+export function splitExcludedRoutes(service: string | null | undefined): string[] {
+  if (splitForSession(service) !== 'exclude') return [];
+  const live = readLive();
+  const v = live ? readToml(live, 'split', 'routes') : null;
+  return Array.isArray(v) ? v.map(String) : [];
 }

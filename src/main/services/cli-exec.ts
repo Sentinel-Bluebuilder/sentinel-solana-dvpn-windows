@@ -5,12 +5,16 @@
 //   · a spend or system change still prints what it would do until --yes is typed
 //   · one command at a time; output is redacted like the CLI's
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import { parseArgs, UsageError } from '../../cli/args';
 import { COMMANDS, NeedsConfirm, type Out } from '../../cli/commands';
 import { CATALOGUE, entryFor, GROUP_LABEL } from '../../cli/catalogue';
 import { redact, redactUrls, log } from '../logger';
 import { getHost } from '../host';
+import { openTerminal } from '../system/cli-shell';
+import { tr } from '../../shared/i18n';
 
 export interface CliRun { ok: boolean; text: string; needsConfirm?: boolean; code?: number }
 
@@ -33,7 +37,7 @@ export function helpText(): string {
     rows.push(label);
     for (const c of cmds) rows.push(`  ${c.usage}\n      ${c.summary}`);
   }
-  return [...rows, '', 'Built in: help · clear', 'Add --json for machine output. Spending asks for --yes.'].join('\n');
+  return [...rows, '', tr('Built in: help and clear.'), tr('Add --json for machine output. Spending asks for --yes.')].join('\n');
 }
 
 export async function runCliLine(line: string): Promise<CliRun> {
@@ -42,12 +46,12 @@ export async function runCliLine(line: string): Promise<CliRun> {
   if (words[0] === 'devnet-dvpn') words.shift();
   if (!words.length || words[0] === 'help') return { ok: true, text: helpText() };
   const cmd = COMMANDS[words[0]];
-  if (!cmd) return { ok: false, text: `Unknown command "${words[0]}". Type help.`, code: 3 };
+  if (!cmd) return { ok: false, text: tr('Unknown command "{words}". Type help.', { words: words[0] }), code: 3 };
   const args = parseArgs(words);
   const entry = entryFor(words.join(' '));
-  if (entry?.appBlocked) return { ok: false, text: `Not available in the app terminal: ${entry.appBlocked}`, code: 3 };
-  if (args.flags.follow) return { ok: false, text: 'Not available in the app terminal: --follow (the Connect screen shows live usage).', code: 3 };
-  if (busy) return { ok: false, text: 'Another command is still running.', code: 1 };
+  if (entry?.appBlocked) return { ok: false, text: tr('Not available in the app terminal: {appBlocked}', { appBlocked: entry.appBlocked }), code: 3 };
+  if (args.flags.follow) return { ok: false, text: tr('Not available in the app terminal: --follow (the Connect screen shows live usage).'), code: 3 };
+  if (busy) return { ok: false, text: tr('Another command is still running.'), code: 1 };
   busy = true;
   const lines: string[] = [];
   const json = args.flags.json === true;
@@ -88,9 +92,66 @@ export function powerShellLaunch(script: string): { file: string; args: string[]
   };
 }
 
-/** A PowerShell window with `devnet-dvpn` bound to this app's data folder (Windows). */
+// ─── macOS: a Terminal.app window (the macOS app) ───
+/** Single-quote for bash (exported for tests). */
+export const shq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/** The bash rc file that binds `devnet-dvpn` to this app's data folder (exported for tests). */
+export function cliShellRc(execPath: string, cliPath: string, resourcesDir: string, dataDir: string): string {
+  return [
+    '[ -f ~/.bashrc ] && . ~/.bashrc',
+    `export DVPN_DATA_DIR=${shq(dataDir)}`,
+    `export DVPN_RESOURCES=${shq(resourcesDir)}`,
+    // The app binary runs the CLI bundle as plain Node.
+    `devnet-dvpn() { ELECTRON_RUN_AS_NODE=1 NODE_NO_WARNINGS=1 ${shq(execPath)} ${shq(cliPath)} "$@"; }`,
+    "printf '\\033[32mdevnet-dvpn is ready. Try: devnet-dvpn help\\033[0m\\n'",
+    '',
+  ].join('\n');
+}
+
+/** The .command file Terminal.app runs: Apple's bash with our rc file (exported for tests). */
+export function commandFile(rc: string, cwd: string): string {
+  return ['#!/bin/bash', `cd ${shq(cwd)} || exit 1`, `exec /bin/bash --rcfile ${shq(rc)} -i`, ''].join('\n');
+}
+
+function openMacTerminal(execPath: string, cliPath: string, resourcesDir: string): { ok: boolean; error?: string } {
+  const rc = path.join(getHost().dataDir, 'cli-shell.rc');
+  const cmd = path.join(getHost().dataDir, 'Devnet dVPN CLI.command');
+  try {
+    fs.writeFileSync(rc, cliShellRc(execPath, cliPath, resourcesDir, getHost().dataDir), { encoding: 'utf8', mode: 0o600 });
+    // Starts in the home folder: cliPath can sit inside app.asar, a file, not a folder (Q0295).
+    fs.writeFileSync(cmd, commandFile(rc, os.homedir()), { encoding: 'utf8', mode: 0o700 });
+  } catch (err) {
+    return { ok: false, error: tr('Could not prepare the terminal: {message}', { message: (err as Error).message }) };
+  }
+  try {
+    const p = spawn('/usr/bin/open', ['-a', 'Terminal', cmd], { detached: true, stdio: 'ignore' });
+    p.once('error', (err) => log.error('Open in terminal: Terminal did not start', { err: err.message }));
+    p.unref();
+    return { ok: true };
+  } catch (err) {
+    log.warn('Terminal failed to start', { err: (err as Error).message });
+    return { ok: false, error: tr('Terminal could not be opened. Run devnet-dvpn from your own terminal.') };
+  }
+}
+
+/**
+ * A shell window with `devnet-dvpn` bound to this app's data folder: PowerShell on Windows, Terminal.app
+ * on macOS. Name kept (IPC CLI_POWERSHELL); other OSes add their branch here.
+ */
 export function openPowerShell(execPath: string, cliPath: string, resourcesDir: string): { ok: boolean; error?: string } {
-  if (process.platform !== 'win32') return { ok: false, error: 'PowerShell is Windows-only; run the CLI from your terminal.' };
+  if (process.platform === 'darwin') return openMacTerminal(execPath, cliPath, resourcesDir);
+  if (process.platform === 'linux') {
+    // Linux (the Linux app): bash with this rc in the first terminal program found (platform system/cli-shell.ts).
+    const rc = path.join(getHost().dataDir, 'cli-shell.rc');
+    try {
+      fs.writeFileSync(rc, cliShellRc(execPath, cliPath, resourcesDir, getHost().dataDir), { encoding: 'utf8', mode: 0o600 });
+    } catch (err) {
+      return { ok: false, error: tr('Could not prepare the terminal: {message}', { message: (err as Error).message }) };
+    }
+    return openTerminal(rc);
+  }
+  if (process.platform !== 'win32') return { ok: false, error: tr('PowerShell is Windows-only; run the CLI from your terminal.') };
   const q = (s: string): string => `'${s.replace(/'/g, "''")}'`;
   const script = [
     `$env:DVPN_DATA_DIR = ${q(getHost().dataDir)}`,
@@ -102,7 +163,7 @@ export function openPowerShell(execPath: string, cliPath: string, resourcesDir: 
   ].join('; ');
   try {
     const l = powerShellLaunch(script);
-    // Q0295 (rc, installed app): cliPath is inside app.asar, which is a file, not a folder. A cwd there
+    // Q0295 (ddv2-wx1, installed app): cliPath is inside app.asar, which is a file, not a folder. A cwd there
     // made the spawn fail (ENOENT, after this returned ok) and nothing started at all. The shell starts in the
     // user's home folder, and a failed spawn is logged.
     const p = spawn(l.file, l.args, { ...l.options, cwd: os.homedir() });

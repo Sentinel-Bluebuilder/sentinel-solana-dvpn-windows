@@ -18,8 +18,14 @@ param(
   # The app's bin folder; its v2ray\, xray\ and hysteria2\ subfolders are the SERVICE's PATH (with System32)
   [string]$BinRoot = '',
   # The Windows account that uses the app (DOMAIN\name). Empty = the signed-in console user.
-  [string]$User = ''
+  [string]$User = '',
+  # rc9-c OWNER-SYNC: the wallet this device is set up for. Empty = the installed owner is left as it is.
+  [string]$Owner = ''
 )
+# rc9-f3 (Windows testing live): never compile or load from the caller's current directory. The installer starts this from
+# a folder that may hold NSIS's 32-bit System.dll, and Add-Type's csc resolves System.dll from the cwd first.
+Set-Location -LiteralPath $env:SystemRoot
+[System.IO.Directory]::SetCurrentDirectory($env:SystemRoot)
 $ErrorActionPreference = 'Stop'
 $instance = 'c0'
 $group = 'sentinel-dvpn'
@@ -48,8 +54,16 @@ $script:SwapRights = [System.Security.AccessControl.FileSystemRights]'Delete, De
 # refusing anyone (them included) the swap rights above. Any deeper level stays strict.
 $script:StockRootSids = @('S-1-5-32-545', 'S-1-5-11')
 
+# R1 (rc9-c2): the owner of a folder may always rewrite its ACL, whatever the ACEs say: an owner that is not an
+# admin SID makes the folder changeable by that account.
+function Test-AdminOwner([string]$ownerSid) {
+  return ($AdminSids -contains $ownerSid)
+}
+
 function Assert-AdminOnly([string]$dir, [switch]$TolerateStockRoot) {
   $acl = Get-Acl -LiteralPath $dir
+  $ownerSid = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+  if (-not (Test-AdminOwner $ownerSid)) { throw "the app folder $dir is owned by $ownerSid, who can change it; reinstall the app into Program Files" }
   foreach ($r in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) {
     if ($r.AccessControlType -ne 'Allow') { continue }
     # An inherit-only ACE does not apply to THIS folder, only to its children. The chain walk judges
@@ -80,10 +94,36 @@ function Assert-AdminOnlyChain([string]$leaf) {
   }
 }
 
+# rc9-c OWNER-SYNC (Windows testing w11): the root-table `owner` of a config.toml, set to $owner. Returns $null when it already
+# is, else @{ text; old }. Only the text before the first [section] is read, so a nested `owner` is never touched;
+# the quote style is kept. No owner line = a broken home: throw.
+$OwnerLine = '(?m)^(\s*owner\s*=\s*)([''"])([^''"]*)\2'
+function Update-ConfigOwner([string]$text, [string]$owner) {
+  $cut = [regex]::Match($text, '(?m)^\s*\[')
+  $head = if ($cut.Success) { $text.Substring(0, $cut.Index) } else { $text }
+  $tail = if ($cut.Success) { $text.Substring($cut.Index) } else { '' }
+  $m = [regex]::Match($head, $OwnerLine)
+  if (-not $m.Success) { throw 'config.toml has no owner line' }
+  if ($m.Groups[3].Value -eq $owner) { return $null }
+  $q = $m.Groups[2].Value
+  $new = $head.Substring(0, $m.Index) + $m.Groups[1].Value + $q + $owner + $q + $head.Substring($m.Index + $m.Length)
+  return @{ text = $new + $tail; old = $m.Groups[3].Value }
+}
+
+# rc9-c D1-D3: the staging folder is checked, snapshotted with links refused, and removed safely.
+. (Join-Path $PSScriptRoot 'staging-guard.ps1')
+
 # Dot-sourcing (the Pester test) stops here with the functions defined; a real elevated run continues.
 if ($MyInvocation.InvocationName -eq '.') { return }
 
+# Q0576: a PowerShell 7 parent (an installer or CLI started from a pwsh window) leaks 7's module path
+# into 5.1, and Get-Acl's module then fails to load ("AuditToString is already present"): the script
+# died in one second and an update left the service stopped. Same reset as install-deps.ps1.
+$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+
 try {
+  # rc9-c D5: only this app's service (the grant-pipe.ps1 check).
+  if ($Service -notmatch '^sentinel-dvpnd\$([a-z0-9]+)$') { throw "unexpected service name $Service" }
   if (-not (Test-Path -LiteralPath $Dvpnd -PathType Leaf)) { throw "sentinel-dvpnd not found at $Dvpnd" }
   if ([System.IO.Path]::GetFileName($Dvpnd) -ne 'sentinel-dvpnd.exe') { throw 'unexpected daemon binary name' }
   $want = Join-Path $env:ProgramData "sentinel-dvpn\$instance"
@@ -91,18 +131,29 @@ try {
   $binDir = Split-Path -Parent $Dvpnd
   Assert-AdminOnlyChain $binDir
   if ($BinRoot) { Assert-AdminOnlyChain $BinRoot }
+  # rc9-f2 (Windows testing, L): the folders were checked, not the programs in them. A sentinel-dvpnd.exe or protocol
+  # binary a standard user may write (an explicit ACE on the file) would still run as SYSTEM.
+  Assert-AdminOnly $Dvpnd
+  if ($BinRoot) { foreach ($exe in Get-ChildItem -LiteralPath $BinRoot -Recurse -Force -File -Filter '*.exe') { Assert-AdminOnly $exe.FullName } }
 
+  # rc9-c D1-D3: only the app's own staging folder (daemon-staging, or daemon-switch for a wallet switch), read ONCE
+  # into an admin-only snapshot with every link refused; everything below reads $snap, never the user's folder.
+  $snap = ''
+  if ($Staging) {
+    $Staging = Assert-StagingPath $Staging @('daemon-staging', 'daemon-switch')
+    if (Test-Path -LiteralPath $Staging -PathType Container) { $snap = Copy-StagingSnapshot $Staging }
+  }
   $homeHas = Test-Path -LiteralPath (Join-Path $DaemonHome 'config.toml') -PathType Leaf
-  $stagedHas = $Staging -and (Test-Path -LiteralPath (Join-Path $Staging 'config.toml') -PathType Leaf)
+  $stagedHas = $snap -and (Test-Path -LiteralPath (Join-Path $snap 'config.toml') -PathType Leaf)
   if (-not $homeHas -and -not $stagedHas) { throw "no config.toml in the staging home ($Staging) or the service home ($DaemonHome)" }
   if ($homeHas -and $stagedHas) {
     # A new device for a NEW owner (the user switched wallets): the staged home holds the key the
     # owner just granted. Installing nothing and then deleting the staging copy destroyed that key
-    # (test-host 2026-10-24: grant + fee SOL stranded on a key that no longer existed, while the
+    # (ddv-w11x2 2026-10-24: grant + fee SOL stranded on a key that no longer existed, while the
     # service kept the old device). Same key = a re-run: keep the installed home.
     $keyOf = { param($h) $rows = (& $Dvpnd key list --instance c0 --home $h 2>$null | Out-String); if ($rows -match '\[') { ($rows.Substring($rows.IndexOf('[')) | ConvertFrom-Json) | Where-Object { $_.name -eq 'operator' } | ForEach-Object { $_.public_key } | Select-Object -First 1 } }
     $old = & $keyOf $DaemonHome
-    $new = & $keyOf $Staging
+    $new = & $keyOf $snap
     if (-not $new) { throw "staged home has no readable device key: $Staging" }
     if ($old -ne $new) {
       $svc0 = Get-Service -Name $Service -ErrorAction SilentlyContinue
@@ -121,7 +172,25 @@ try {
   }
   if (-not $homeHas) {
     New-Item -ItemType Directory -Force -Path $DaemonHome | Out-Null
-    Copy-Item -Path (Join-Path $Staging '*') -Destination $DaemonHome -Recurse -Force
+    Copy-Item -Path (Join-Path $snap '*') -Destination $DaemonHome -Recurse -Force
+  }
+  # rc9-c OWNER-SYNC: same device key, another wallet (E-ST adopts the service key, so nothing is staged and the home
+  # above is kept). dvpnd checks its grant against config.toml's owner: point it at the wallet that granted it.
+  if ($Owner) {
+    if ($Owner -notmatch '^[1-9A-HJ-NP-Za-km-z]{32,44}$') { throw "not a wallet address: $Owner" }
+    $cfgPath = Join-Path $DaemonHome 'config.toml'
+    $upd = Update-ConfigOwner ([System.IO.File]::ReadAllText($cfgPath)) $Owner
+    if ($upd) {
+      $svc1 = Get-Service -Name $Service -ErrorAction SilentlyContinue
+      if ($svc1 -and $svc1.Status -ne 'Stopped') {
+        $pid1 = (Get-CimInstance Win32_Service -Filter "Name='$Service'").ProcessId
+        Stop-Service -Name $Service -Force
+        $svc1.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        if ($pid1) { Wait-Process -Id $pid1 -Timeout 30 -ErrorAction SilentlyContinue }
+      }
+      [System.IO.File]::WriteAllText($cfgPath, $upd.text, (New-Object System.Text.UTF8Encoding($false)))
+      Write-Output "service owner $($upd.old) -> $Owner (same device key; home kept)"
+    }
   }
   & (Join-Path $PSScriptRoot 'migrate-daemon-config.ps1') -DaemonHome $DaemonHome | Out-Null
 
@@ -138,10 +207,16 @@ try {
   # Plain automatic start failed on EVERY boot of the GCP VM (3 of 3, 2026-10-21): Windows gave
   # up after 45 s waiting for the unsigned daemon to connect (event 7009) while the rest of boot
   # was still loading, and the restart actions do not cover a start timeout. Delayed start (about
-  # 2 min after boot) came up on its own (UPSTREAM-GAPS the Android app). Also restart on any non-crash failure.
+  # 2 min after boot) came up on its own (UPSTREAM-GAPS #34). Also restart on any non-crash failure.
   & sc.exe config $Service start= delayed-auto | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'could not set the service to delayed automatic start' }
   & sc.exe failureflag $Service 1 | Out-Null
+  # Q0548: the restart policy, on EVERY run. `service install` sets it only when it creates the service, so an
+  # upgrade kept the old one (hunt VM 11-13: 6.10 installed over 6.9, RESET_PERIOD still 86400): a third crash in a
+  # day waited 5 min with the kill switch blocking. Same values as dvpnd's install (fork 6.10 main_windows.go
+  # serviceRestartDelays 5 s / 30 s / 5 min, serviceResetPeriod 1 h): change both together.
+  & sc.exe failure $Service reset= 3600 actions= restart/5000/restart/30000/restart/300000 | Out-Null
+  if ($LASTEXITCODE -ne 0) { Write-Warning "could not set the service restart policy (sc.exe failure exit $LASTEXITCODE)" }
   & (Join-Path $PSScriptRoot 'service-user-start.ps1') -Service $Service
 
   # The pipe admits SYSTEM, Administrators and the sentinel-dvpn group (rights 0x120183, which is
@@ -151,7 +226,7 @@ try {
   $relogin = $false
   if ($User) {
     # PowerShell 5.1 with EAP Stop turns net.exe's stderr line into a terminating error, so "already a member"
-    # (1378: a second daemon install, reinstall or repair) threw before the 1378 check below (QA 11-09).
+    # (1378: a second daemon install, reinstall or repair) threw before the 1378 check below (WINROWS 11-09).
     $ErrorActionPreference = 'Continue'
     $add = (& net.exe localgroup $group $User /add 2>&1 | Out-String)
     $addCode = $LASTEXITCODE
@@ -172,9 +247,17 @@ try {
   $svcKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$Service"
   $had = (Get-ItemProperty -Path $svcKey -Name Environment -ErrorAction SilentlyContinue).Environment
   New-ItemProperty -Path $svcKey -Name Environment -PropertyType MultiString -Value @("PATH=$svcPath") -Force | Out-Null
-  if ((($had | Out-String).Trim() -ne "PATH=$svcPath") -and (Get-Service -Name $Service).Status -eq 'Running') {
-    # Restart so a running service picks the PATH up. Wait for the old process to exit: a daemon
-    # started while it still runs exits at once.
+  # Any state but Stopped must restart: the app's automatic start can begin 0.4 s after `service install`, so
+  # here the service may be StartPending with the OLD environment (c975868 on dvw-proof 11-15: dvpnd ran without
+  # the protocol folders and the first paid V2Ray connect failed "binary not found: v2ray").
+  $st = (Get-Service -Name $Service).Status
+  if ((($had | Out-String).Trim() -ne "PATH=$svcPath") -and $st -ne 'Stopped') {
+    # Restart so a running service picks the PATH up. Let a pending start finish first, then wait for the
+    # old process to exit: a daemon started while it still runs exits at once.
+    if ($st -eq 'StartPending') {
+      try { (Get-Service -Name $Service).WaitForStatus('Running', [TimeSpan]::FromSeconds(30)) }
+      catch { Write-Warning "service still $((Get-Service -Name $Service).Status) after 30 s; stopping it anyway: $($_.Exception.Message)" }
+    }
     $oldPid = (Get-CimInstance Win32_Service -Filter "Name='$Service'").ProcessId
     Stop-Service -Name $Service -Force
     (Get-Service -Name $Service).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
@@ -193,10 +276,23 @@ try {
   # the daemon released the old block row; from now on migrate-daemon-config.ps1 moves 'on' to 'persist'.
   $ksMark = Join-Path $DaemonHome '.ks-stepped-down'
   if (Test-Path -LiteralPath $ksMark) { Remove-Item -LiteralPath $ksMark -Force }
-  if ($Staging -and (Test-Path -LiteralPath $Staging)) { Remove-Item -LiteralPath $Staging -Recurse -Force }
+  # D1: never Remove-Item -Recurse (PowerShell 5.1 follows a junction inside); the snapshot holds the device secret.
+  if ($Staging) { Remove-StagingTree $Staging }
+  Remove-StagingTree $snap
+  # A user just added to the group cannot use it until the next sign-in: give their own account the
+  # same pipe access now, so the app works at once (grant-pipe.ps1). Failure only means a sign-out.
+  if ($User -and $BinRoot) {
+    try {
+      & (Join-Path $PSScriptRoot 'grant-pipe.ps1') -Bridge (Join-Path $BinRoot 'pipe-bridge.exe') -User $User -Service $Service -Persist 1 | Out-Null
+      if ($LASTEXITCODE -eq 0) { $relogin = $false }
+    } catch {
+      Write-Warning "pipe grant failed; the user must sign out and in once: $($_.Exception.Message)"
+    }
+  }
   Write-Result 'ok' ($(if ($relogin) { 'service installed and running; relogin-needed' } else { 'service installed and running' }))
   exit 0
 } catch {
+  if ($snap) { Remove-StagingTree $snap }
   Write-Result 'error' $_.Exception.Message
   exit 1
 }

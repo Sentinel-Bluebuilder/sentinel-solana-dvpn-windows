@@ -68,7 +68,7 @@ export function streamLeft(ch: StreamFields, now: number): bigint {
 /**
  * The deposit was closed by someone else (the node, or another app/CLI on this wallet) between
  * the list and our transaction: the account no longer exists. Settle skips it instead of
- * stopping (cli191 test-host 2026-10-22: one of 245 deposits aborted the whole run).
+ * stopping (cli191 ddv-win-2 2026-10-22: one of 245 deposits aborted the whole run).
  * Two settles racing on one wallet: the loser meets ChannelNotOpen on a deposit the winner moved on.
  */
 export function channelGone(msg: string): boolean {

@@ -34,9 +34,9 @@ foreach ($p in Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Pa
 
 $apppaths = New-Object System.Collections.ArrayList
 $apRoots = @(
-  'HKLM:SOFTWAREMicrosoftWindowsCurrentVersionApp Paths',
-  'HKLM:SOFTWAREWOW6432NodeMicrosoftWindowsCurrentVersionApp Paths',
-  'HKCU:SOFTWAREMicrosoftWindowsCurrentVersionApp Paths'
+  'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths',
+  'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths',
+  'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths'
 )
 foreach ($r in $apRoots) {
   foreach ($k in Get-ChildItem -LiteralPath $r) {

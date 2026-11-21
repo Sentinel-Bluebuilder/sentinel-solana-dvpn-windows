@@ -15,7 +15,7 @@ describe('parseDoctorRows', () => {
   it('a failed grant row reads as plain copy, not a dvpnctl command', () => {
     const [g] = parseDoctorRows('[{"detail":"6dJ3 holds no grant; run dvpnctl grant open-grant --key <owner>","name":"grant","ok":false}]');
     expect(g.detail).not.toMatch(/dvpnctl|--key/);
-    expect(g.detail).toMatch(/spending permission/);
+    expect(g.detail).toMatch(/no spending limit yet/);
   });
   it('still reads dfe36c7 capitalised rows', () => {
     expect(parseDoctorRows('[{"Name":"mandate","OK":false,"Detail":"x"}]')[0]).toEqual({ name: 'mandate', ok: false, level: 'fail', detail: 'x' });
@@ -49,28 +49,10 @@ describe('doctor levels from cb33 severity', () => {
       { name: 'service_adapter_openvpn', ok: true, severity: 'ok', detail: 'adapter present' },
     ]));
     expect(rows.map((r) => r.level)).toEqual(['ok', 'warn', 'fail', 'ok']);
-    expect(rows[2].detail).toMatch(/spending permission/);
+    expect(rows[2].detail).toMatch(/no spending limit yet/);
   });
   it('nothing held still reads in plain words with a severity', () => {
     const [r] = parseDoctorRows(JSON.stringify([{ name: 'kill_switch', ok: true, severity: 'ok', detail: 'no persisted kill switch' }]));
     expect(r).toMatchObject({ level: 'ok', detail: expect.stringMatching(/Nothing held/) });
-  });
-});
-
-// cb33 opens the Windows pipe to the sentinel-dvpn group only; Windows applies a new group at sign-in.
-describe('fresh-install sign-in step', async () => {
-  const { daemonLinkCopy } = await import('../../src/core/daemon/link-copy');
-  const { appUserAccount, needsRelogin } = await import('../../src/main/daemon/manager');
-  it('setup-daemon\'s "relogin-needed" is read; plain installs are not', () => {
-    expect(needsRelogin('service installed and running; relogin-needed')).toBe(true);
-    expect(needsRelogin('service installed and running')).toBe(false);
-    expect(needsRelogin(undefined)).toBe(false);
-  });
-  it('access denied tells the user to sign out and back in once', () => {
-    expect(daemonLinkCopy('14 UNAVAILABLE: connect EACCES (pipe)')).toMatch(/Sign out of Windows and sign back in once/);
-  });
-  it('the app passes its own account to the elevated script', () => {
-    expect(appUserAccount({ USERDOMAIN: 'PC1', USERNAME: 'alex' })).toBe('PC1\\alex');
-    expect(appUserAccount({ USERNAME: 'alex' })).toBe('alex');
   });
 });
