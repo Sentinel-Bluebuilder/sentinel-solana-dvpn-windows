@@ -8,19 +8,16 @@ Devnet dVPN is a pure peer-to-peer dVPN app on the Sentinel Solana devnet protoc
 
 Latest release: <https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/latest>
 
-Latest release, **v0.2.1**:
+Latest release, **v0.3.0** (<https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/tag/v0.3.0>):
 
-| Platform | File |
-|---|---|
-| Windows 10/11 x64 | `Devnet-dVPN-Setup-0.2.1-x64.exe` |
-| Windows 11 ARM64 | `Devnet-dVPN-Setup-0.2.1-arm64.exe` |
-| Sentinel CLI + daemon (x64 / arm64) | `sentinel-dvpn-windows-<arch>.exe`, `sentinel-dvpnd-windows-<arch>.exe` |
-| Checksums | `SHA256SUMS` |
+| Platform | File | SHA-256 |
+|---|---|---|
+| Windows 10/11 x64 | `Devnet-dVPN-Setup-0.3.0-rc.9-x64.exe` | `739faf6280ed34b0eec71b0f25f9e0e873a6d0a41eb04ea994e39785a2bb3bc9` |
+| Checksums | `SHA256SUMS` | |
 
-Pre-release **v0.3.0-rc4** (<https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases/tag/v0.3.0-rc4>):
-`Devnet-dVPN-Setup-0.3.0-rc.4-x64.exe` and `SHA256SUMS` only (no ARM64 installer, no separate CLI / daemon files).
+The installer's file name keeps "rc.9" because v0.3.0 is the same build as release candidate 9: the file was not rebuilt or renamed.
 
-Earlier builds (0.2.0, RC1 0.1.0): <https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases>
+Earlier builds (0.3.0 release candidates, 0.2.1, 0.2.0, RC1 0.1.0): <https://github.com/Sentinel-Bluebuilder/sentinel-solana-dvpn-windows/releases>
 
 ## Languages (0.3.0 RC4)
 
